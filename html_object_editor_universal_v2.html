@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>HTML 개체 편집기</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { display: flex; height: 100vh; font-family: Inter, "Pretendard", "Malgun Gothic", Arial, sans-serif; background: #eef1f5; color: #202124; }
+
+  #sidebar { width: 184px; background: #fff; padding: 14px 12px; overflow-y: auto; border-right: 1px solid #dde1e7; }
+  #sidebar .stitle { font-size: 12px; font-weight: 700; color: #51565f; margin-bottom: 12px; letter-spacing: .2px; }
+  .thumb-wrap { position: relative; margin-bottom: 10px; cursor: pointer; }
+  .thumb-wrap[draggable="true"] { cursor:grab; }
+  .thumb-wrap.dragging { opacity:.38; }
+  .thumb-wrap.drop-before::before, .thumb-wrap.drop-after::after { content:""; position:absolute; left:0; right:0; height:3px; border-radius:3px; background:#7655ef; z-index:5; }
+  .thumb-wrap.drop-before::before { top:-6px; }
+  .thumb-wrap.drop-after::after { bottom:-6px; }
+  .thumb { width: 158px; height: 89px; border: 2px solid #d9dde4; border-radius: 7px; overflow: hidden; background: #fff; position: relative; box-shadow: 0 1px 2px rgba(25,32,44,.08); }
+  .thumb-wrap.active .thumb { border-color: #7c5cff; box-shadow: 0 0 0 2px rgba(124,92,255,.14); }
+  .thumb iframe { border: 0; transform-origin: top left; pointer-events: none; }
+  .thumb-num { position: absolute; left: 4px; bottom: 2px; font-size: 10px; color: #888; }
+  .thumb-view-name { padding:6px 4px 0; font-size:11px; line-height:1.3; color:#555b66; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .thumb-wrap.active .thumb-view-name { color:#6845e8; font-weight:700; }
+  .thumb-del { position: absolute; right: 2px; top: 2px; width: 18px; height: 18px; line-height: 16px; text-align: center;
+    background: rgba(192,57,43,0.9); color: #fff; border-radius: 3px; font-size: 12px; opacity: 0; transition: .15s; }
+  .thumb-wrap:hover .thumb-del { opacity: 1; }
+  #addSlide { width: 158px; padding: 9px; background: #f8f9fb; border: 1px dashed #b7bdc8; color: #555c68; border-radius: 7px; cursor: pointer; font-size: 12px; margin-top: 4px; }
+  #addSlide:hover { border-color: #7c5cff; color: #6948ef; background:#f6f3ff; }
+  body.multi-view #addSlide { display:none; }
+  body.preview-mode #canvas-wrap { background:#dde8e2; }
+  body.preview-mode #canvas { box-shadow:0 0 0 3px #26a269,0 8px 30px rgba(25,32,44,.18); }
+
+  #canvas-wrap { position:relative; flex:1; display:flex; align-items:center; justify-content:flex-start; background:#e7e9ee; flex-direction:column; gap:16px; padding:14px 20px 20px; overflow:auto; }
+  #canvas-wrap.bg-mode { background: #eeeafc; }
+  #canvas-wrap.bg-mode #canvas { box-shadow: 0 0 0 3px #7655ef, 0 8px 30px rgba(25,32,44,.18); }
+  #panel { width: 280px; background: #fff; padding: 16px; border-left: 1px solid #dde1e7; overflow-y: auto; }
+
+  #stage { position: relative; flex: 0 0 auto; }
+  #canvas { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; background: white; border: none; box-shadow: 0 8px 30px rgba(25,32,44,.18); transform-origin: top left; }
+
+  #welcomeScreen { display:none; width:min(920px,100%); margin:auto; padding:34px; border:1px solid #d9dde5; border-radius:20px; background:#fff; box-shadow:0 18px 48px rgba(35,42,58,.12); }
+  body.empty-project #welcomeScreen { display:block; }
+  body.empty-project #toolbar,body.empty-project #stage,body.empty-project #bgEditBanner,body.empty-project #sidebar,body.empty-project #panel { display:none!important; }
+  body.empty-project #canvas-wrap { justify-content:center; padding:28px; }
+  .welcome-kicker { color:#7655ef; font-size:12px; font-weight:800; letter-spacing:.7px; }
+  .welcome-title { margin-top:8px; color:#20242d; font-size:27px; line-height:1.25; letter-spacing:-.8px; }
+  .welcome-desc { margin-top:9px; color:#747c89; font-size:13px; line-height:1.6; }
+  .welcome-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:26px; }
+  .welcome-drop { min-height:225px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; border:2px dashed #c9cfda; border-radius:16px; background:#fafbfc; text-align:center; cursor:pointer; transition:.18s ease; }
+  .welcome-drop:hover,.welcome-drop.dragover { border-color:#7655ef; background:#f4f1ff; transform:translateY(-2px); box-shadow:0 10px 26px rgba(87,61,190,.12); }
+  .welcome-drop.general:hover,.welcome-drop.general.dragover { border-color:#1d9d75; background:#effaf6; box-shadow:0 10px 26px rgba(29,157,117,.11); }
+  .welcome-icon { width:50px; height:50px; display:grid; place-items:center; margin-bottom:15px; border-radius:15px; background:#eee9ff; color:#6948df; font-size:23px; font-weight:800; }
+  .welcome-drop.general .welcome-icon { background:#e5f7f1; color:#178462; }
+  .welcome-drop strong { color:#252a33; font-size:17px; }
+  .welcome-drop span { margin-top:7px; color:#737c89; font-size:12px; line-height:1.55; }
+  .welcome-drop em { margin-top:14px; padding:7px 11px; border-radius:999px; background:#fff; color:#6241d7; font-size:11px; font-style:normal; box-shadow:0 2px 8px rgba(30,36,50,.08); }
+  .welcome-drop.general em { color:#17775c; }
+  #welcomeJson { display:block; width:auto; margin:18px auto 0; padding:8px 13px; border:1px solid #d9dee7; background:#fff; color:#59616e; }
+  #welcomeJson:hover { border-color:#b9addf; background:#f7f5ff; color:#6241d7; }
+  @media(max-width:760px){.welcome-grid{grid-template-columns:1fr}.welcome-drop{min-height:180px}#welcomeScreen{padding:22px}}
+
+  #toolbar { position:sticky; top:0; z-index:60; display:flex; flex:0 0 auto; align-self:center; flex-direction:column; flex-wrap:nowrap; gap:0; width:min(100%,1280px); max-width:1280px; min-height:70px; background:#fff; padding:0; border:1px solid #d9dde5; border-radius:10px; box-shadow:0 2px 8px rgba(25,32,44,.07); overflow:visible; }
+  #toolbar button {
+    padding: 7px 10px; background: #fff; color: #343943;
+    border: 1px solid transparent; border-radius: 6px; cursor: pointer; font-size: 12px; width: auto; margin: 0;
+  }
+  #toolbar button:hover { background: #f1edff; color: #6443e8; border-color: #ded5ff; }
+  .ribbon-tabs { display:flex; flex:0 0 29px; align-items:end; height:29px; min-height:29px; padding:3px 7px 0; gap:2px; border-bottom:1px solid #e5e7ec; border-radius:10px 10px 0 0; background:#fafbfc; }
+  #toolbar .ribbon-tab { height:26px; padding:4px 13px; border-radius:6px 6px 0 0; color:#5d6470; font-size:11px; font-weight:600; }
+  #toolbar .ribbon-tab.active { background:#fff; color:#6241df; border-color:#ded8f7; border-bottom-color:#fff; }
+  .ribbon-panel { display:none; align-items:center; justify-content:flex-start; flex-wrap:wrap; gap:2px; min-height:39px; padding:4px 7px; overflow:visible; }
+  .ribbon-panel.active { display:flex; flex:0 0 auto; }
+  .tool-group { display:flex; align-items:center; flex:0 0 auto; gap:1px; padding-right:5px; margin-right:4px; border-right:1px solid #e3e6eb; }
+  .tool-group:last-child { border-right:0; margin-right:0; padding-right:0; }
+  #toolbar .ribbon-panel button { padding:5px 8px; font-size:11px; white-space:nowrap; }
+  #toolbar .div { width: 1px; align-self: stretch; background: #e2e5ea; margin: 2px 2px; }
+  #zoomInfo { color:#68707d; font-size:10px; padding:0 3px; white-space:nowrap; min-width:100px; text-align:center; }
+  #toolbar button.active { background:#7655ef; color:#fff; border-color:#7655ef; }
+  #bgEditBanner { display:none; position:absolute; top:84px; right:24px; z-index:50; align-items:center; gap:8px; padding:6px 8px 6px 10px; border-radius:8px; background:rgba(49,36,99,.94); color:#fff; font-size:11px; box-shadow:0 3px 10px rgba(49,36,99,.22); backdrop-filter:blur(8px); }
+  #bgEditBanner.show { display:flex; }
+  #bgEditBanner button { width:auto; margin:0; padding:4px 7px; background:#fff; color:#4f35b7; font-size:10px; }
+
+  #panel h3 { font-size: 11px; color: #747b87; margin: 16px 0 9px; text-transform: uppercase; letter-spacing: .7px; }
+  #panel h3:first-of-type { margin-top: 0; }
+  .prop { margin-bottom: 9px; }
+  .prop label { display: block; font-size: 11px; color: #999; margin-bottom: 3px; }
+  .prop input, .prop select {
+    width: 100%; padding: 6px 8px; background: #f8f9fb; border: 1px solid #dfe3e9;
+    color: #252a32; border-radius: 6px; font-size: 13px;
+  }
+  .prop input[type=color] { height: 32px; padding: 2px; cursor: pointer; }
+  .prop-row { display: flex; gap: 7px; }
+  .prop-row .prop { flex: 1; }
+
+  button { width: 100%; padding: 8px; margin-top: 6px; background: #7655ef; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  button:hover { background: #6544e3; }
+  button.sec { background: #f7f8fa; color: #434955; border: 1px solid #dfe3e9; }
+  button.sec:hover { background: #eff1f5; }
+  button.danger { background: #c0392b; }
+  button.danger:hover { background: #e74c3c; }
+
+  #no-selection { color: #555; font-size: 12px; text-align: center; padding-top: 30px; line-height: 1.8; }
+  #props { display: none; }
+  #tag { font-size: 10px; color: #4a9eff; background: rgba(74,158,255,0.12); padding: 3px 8px; border-radius: 3px; display: inline-block; margin-bottom: 10px; }
+  hr { border: none; border-top: 1px solid #e5e8ed; margin: 14px 0; }
+
+  #layers { display:flex; flex-direction:column; gap:4px; max-height:220px; overflow:auto; }
+  .layer-row { display:grid; grid-template-columns:24px 1fr 26px 26px; align-items:center; gap:3px; min-height:32px; padding:2px 3px; border:1px solid transparent; border-radius:6px; cursor:pointer; font-size:12px; color:#444b56; }
+  .layer-row:hover { background:#f6f4ff; }
+  .layer-row.active { background:#eee9ff; border-color:#d8ceff; color:#5737d7; }
+  .layer-icon { text-align:center; color:#858c97; }
+  .layer-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .layer-action { width:24px; height:24px; margin:0; padding:0; color:#737b87; background:transparent; border:0; }
+  .layer-action:hover { color:#5737d7; background:#e5defe; }
+
+  #fileInput, #jsonInput, #imgInput { display: none; }
+  /* 우클릭 컨텍스트 메뉴 */
+  #ctxmenu { position: fixed; display: none; z-index: 10000; min-width: 150px;
+    background: #2a2a2a; border: 1px solid #444; border-radius: 7px; padding: 5px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.5); }
+  #ctxmenu .ci { padding: 7px 12px; font-size: 13px; color: #ddd; cursor: pointer; border-radius: 4px; }
+  #ctxmenu .ci:hover { background: #4a9eff; color: #fff; }
+  #ctxmenu .sep { height: 1px; background: #444; margin: 4px 6px; }
+</style>
+</head>
+<body>
+
+<input type="file" id="fileInput" accept=".html">
+<input type="file" id="jsonInput" accept=".json">
+<input type="file" id="imgInput" accept="image/*">
+<div id="ctxmenu">
+  <div class="ci" id="ci-group" onclick="ctx('group')">그룹화</div>
+  <div class="ci" id="ci-ungroup" onclick="ctx('ungroup')">그룹 해제</div>
+  <div class="sep" id="ci-sep"></div>
+  <div class="ci" onclick="ctx('front')">맨 앞으로</div>
+  <div class="ci" onclick="ctx('back')">맨 뒤로</div>
+  <div class="ci" onclick="ctx('dup')">복제</div>
+  <div class="ci" onclick="ctx('del')">삭제</div>
+</div>
+
+<div id="sidebar">
+  <div class="stitle" id="sidebarTitle">HTML 페이지</div>
+  <div id="thumbs"></div>
+  <button id="addSlide" onclick="addSlide()">＋ 슬라이드 추가</button>
+</div>
+
+<div id="canvas-wrap">
+  <div id="welcomeScreen">
+    <div class="welcome-kicker">HTML OBJECT EDITOR</div>
+    <h1 class="welcome-title">편집할 HTML 유형을 선택하세요</h1>
+    <p class="welcome-desc">파일을 아래 영역에 끌어다 놓거나 클릭해서 불러올 수 있습니다.</p>
+    <div class="welcome-grid">
+      <div class="welcome-drop presentation" data-import-mode="presentation" role="button" tabindex="0">
+        <div class="welcome-icon">▶</div><strong>발표용 HTML</strong><span>슬라이드·발표 자료 편집<br>고정 작업판 1280 × 1440px</span><em>HTML 드래그 앤 드롭</em>
+      </div>
+      <div class="welcome-drop general" data-import-mode="general" role="button" tabindex="0">
+        <div class="welcome-icon">⌘</div><strong>일반 HTML 편집</strong><span>문서·리포트·웹페이지 편집<br>크기 자동 감지 · 세부 요소 선택</span><em>HTML 드래그 앤 드롭</em>
+      </div>
+    </div>
+    <button id="welcomeJson" onclick="document.getElementById('jsonInput').click()">기존 JSON 프로젝트 열기</button>
+  </div>
+  <div id="toolbar">
+    <div class="ribbon-tabs"><button class="ribbon-tab active" onclick="switchRibbon('home',this)">홈</button><button class="ribbon-tab" onclick="switchRibbon('insert',this)">삽입</button><button class="ribbon-tab" onclick="switchRibbon('file',this)">파일 · 내보내기</button></div>
+    <div class="ribbon-panel active" data-ribbon="home"><div class="tool-group"><button onclick="undo()">↶ 실행취소</button><button onclick="redo()">↷ 다시실행</button></div><div class="tool-group"><button id="previewModeBtn" onclick="togglePreviewMode()">▷ 미리보기</button><button id="bgModeBtn" onclick="toggleBackgroundMode()">배경 편집</button><button id="gridModeBtn" onclick="toggleGrid()">격자 보기</button></div><div class="tool-group"><button title="축소" onclick="zoomBy(-0.1)">−</button><button title="화면 맞춤" onclick="fitCanvas(true)">맞춤</button><button title="확대" onclick="zoomBy(0.1)">＋</button><span id="zoomInfo">1280×720 · 100%</span></div></div>
+    <div class="ribbon-panel" data-ribbon="insert"><div class="tool-group"><button onclick="addBox('text')">＋ 텍스트</button><button onclick="addBox('rect')">＋ 도형</button><button onclick="document.getElementById('imgInput').click()">＋ 이미지</button></div></div>
+    <div class="ribbon-panel" data-ribbon="file"><div class="tool-group"><button onclick="openImportMode(projectMode)">HTML 불러오기</button><button onclick="document.getElementById('jsonInput').click()">JSON 열기</button></div><div class="tool-group"><button onclick="exportHTML()">HTML 저장</button><button onclick="exportJSON()">JSON 저장</button><button onclick="exportPDF()">PDF 인쇄/저장</button></div></div>
+  </div>
+  <div id="bgEditBanner"><span>▣ <b>배경 편집 중</b> · 삽입 탭에서 배경 도형을 추가할 수 있습니다.</span><button onclick="toggleBackgroundMode(false)">배경 편집 종료</button></div>
+  <div id="stage"><iframe id="canvas"></iframe></div>
+</div>
+
+<div id="panel">
+  <div id="no-selection">요소를 클릭하여<br>선택하세요<br><br>Ctrl+클릭<br>다중 선택<br><br>모서리 핸들로<br>크기 조절</div>
+  <div id="props">
+    <span id="tag">div</span>
+    <span id="selCount" style="font-size:10px;color:#4a9eff;margin-left:6px;"></span>
+    <button id="btnGroup" class="sec" style="display:none;" onclick="groupSel()">그룹화 (Ctrl+G)</button>
+    <button id="btnUngroup" class="sec" style="display:none;" onclick="ungroupSel()">그룹 해제 (Ctrl+Shift+G)</button>
+
+    <h3>위치 / 크기</h3>
+    <div class="prop-row">
+      <div class="prop"><label>X</label><input type="number" id="posX"></div>
+      <div class="prop"><label>Y</label><input type="number" id="posY"></div>
+    </div>
+    <div class="prop-row">
+      <div class="prop"><label>너비</label><input type="number" id="w" min="0"></div>
+      <div class="prop"><label>높이</label><input type="number" id="h" min="0"></div>
+    </div>
+    <div class="prop-row">
+      <div class="prop"><label>회전 (°)</label><input type="number" id="rot"></div>
+      <div class="prop"><label>투명도 %</label><input type="number" id="opacity" min="0" max="100"></div>
+    </div>
+    <div class="prop-row">
+      <button class="sec" onclick="zOrder(1)">앞으로</button>
+      <button class="sec" onclick="zOrder(-1)">뒤로</button>
+    </div>
+
+    <h3>텍스트</h3>
+    <div class="prop"><label>글씨 크기</label><input type="number" id="fontSize" min="1" max="400"></div>
+    <div class="prop"><label>폰트</label>
+      <select id="fontFamily">
+        <optgroup label="추천 한글 글꼴">
+          <option value="Pretendard,'Noto Sans KR','Malgun Gothic',sans-serif">Pretendard</option>
+          <option value="'Noto Sans KR',Pretendard,'Malgun Gothic',sans-serif">Noto Sans KR</option>
+          <option value="'Noto Serif KR','Nanum Myeongjo',Batang,serif">Noto Serif KR</option>
+          <option value="SUIT,Pretendard,'Malgun Gothic',sans-serif">SUIT</option>
+          <option value="'Spoqa Han Sans Neo',Pretendard,'Malgun Gothic',sans-serif">스포카 한 산스 Neo</option>
+          <option value="'Nanum Gothic','Malgun Gothic',sans-serif">나눔고딕</option>
+          <option value="'Nanum Myeongjo',Batang,serif">나눔명조</option>
+          <option value="'NanumSquare','Nanum Gothic','Malgun Gothic',sans-serif">나눔스퀘어</option>
+          <option value="'Gmarket Sans','Malgun Gothic',sans-serif">G마켓 산스</option>
+        </optgroup>
+        <optgroup label="Windows 기본 한글 글꼴">
+          <option value="'Malgun Gothic',Pretendard,sans-serif">맑은 고딕</option>
+          <option value="Gulim,'Malgun Gothic',sans-serif">굴림</option><option value="GulimChe,Gulim,monospace">굴림체</option>
+          <option value="Dotum,'Malgun Gothic',sans-serif">돋움</option><option value="DotumChe,Dotum,monospace">돋움체</option>
+          <option value="Batang,'Nanum Myeongjo',serif">바탕</option><option value="BatangChe,Batang,serif">바탕체</option>
+          <option value="Gungsuh,Batang,serif">궁서</option><option value="GungsuhChe,Gungsuh,serif">궁서체</option>
+          <option value="'Apple SD Gothic Neo',Pretendard,sans-serif">Apple SD Gothic Neo</option>
+        </optgroup>
+        <optgroup label="한컴·문서용 글꼴">
+          <option value="'함초롬돋움','HCR Dotum','Malgun Gothic',sans-serif">함초롬돋움</option>
+          <option value="'함초롬바탕','HCR Batang',Batang,serif">함초롬바탕</option>
+          <option value="'한컴 고딕','Malgun Gothic',sans-serif">한컴 고딕</option><option value="'한컴 말랑말랑','Malgun Gothic',sans-serif">한컴 말랑말랑</option>
+          <option value="'HY신명조','Nanum Myeongjo',Batang,serif">HY신명조</option><option value="'HY견고딕','Malgun Gothic',sans-serif">HY견고딕</option>
+          <option value="'HY헤드라인M','Malgun Gothic',sans-serif">HY헤드라인M</option><option value="'휴먼명조','Nanum Myeongjo',serif">휴먼명조</option><option value="'휴먼고딕','Malgun Gothic',sans-serif">휴먼고딕</option>
+        </optgroup>
+        <optgroup label="영문 글꼴"><option value="Arial,sans-serif">Arial</option><option value="Georgia,serif">Georgia</option><option value="'Courier New',monospace">Courier New</option><option value="Verdana,sans-serif">Verdana</option><option value="'Times New Roman',serif">Times New Roman</option><option value="Impact,sans-serif">Impact</option></optgroup>
+      </select>
+      <button class="sec" style="margin-top:5px;padding:5px 7px;" onclick="loadLocalFonts()">PC 설치 글꼴 불러오기</button>
+      <div id="fontStatus" style="margin-top:4px;color:#8a9099;font-size:10px;line-height:1.4;">새 글꼴 설치 후 Chrome을 다시 시작하고 눌러주세요.</div>
+    </div>
+    <div class="prop-row">
+      <div class="prop"><label>글자색</label><input type="color" id="fontColor"></div>
+      <div class="prop"><label>정렬</label>
+        <select id="align"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select>
+      </div>
+    </div>
+    <div class="prop-row">
+      <div class="prop"><label>굵기</label>
+        <select id="weight"><option value="normal">보통</option><option value="bold">굵게</option></select>
+      </div>
+      <div class="prop"><label>줄간격</label><input type="number" id="lh" step="0.1" min="0.5"></div>
+    </div>
+
+    <h3>배경</h3>
+    <div class="prop-row">
+      <div class="prop"><label>단색</label><input type="color" id="bg"></div>
+      <div class="prop"><label>　</label><button class="sec" style="margin:0;padding:6px;" onclick="clearBg()">투명</button></div>
+    </div>
+    <div class="prop"><label>그라디언트</label>
+      <div class="prop-row">
+        <input type="color" id="g1" value="#4a9eff">
+        <input type="color" id="g2" value="#7b3acd">
+        <input type="number" id="gAngle" value="135" style="max-width:64px;">
+      </div>
+      <button class="sec" onclick="applyGradient()">그라디언트 적용</button>
+    </div>
+
+    <h3>테두리 / 그림자</h3>
+    <div class="prop-row">
+      <div class="prop"><label>모서리</label><input type="number" id="radius" min="0"></div>
+      <div class="prop"><label>테두리</label><input type="number" id="bw" min="0"></div>
+    </div>
+    <div class="prop"><label>테두리 색</label><input type="color" id="bc"></div>
+    <div class="prop"><label>그림자</label>
+      <select id="shadow">
+        <option value="none">없음</option>
+        <option value="0 2px 6px rgba(0,0,0,0.2)">약</option>
+        <option value="0 6px 18px rgba(0,0,0,0.3)">중</option>
+        <option value="0 12px 36px rgba(0,0,0,0.45)">강</option>
+      </select>
+    </div>
+
+    <h3>레이어</h3>
+    <div id="layers"></div>
+
+    <hr>
+    <button class="sec" onclick="dupEl()">복제</button>
+    <button class="danger" onclick="deleteEl()">요소 삭제</button>
+  </div>
+</div>
+
+<script>
+  let SLIDE_W = 1280, SLIDE_H = 720;   // 불러온 HTML 크기에 맞춰 자동 변경
+  const iframe = document.getElementById('canvas');
+  let canvasScale = 1;
+  let manualZoom = null;
+  let idoc = null, iwin = null, selectedEl = null;
+  let editingEl = null;
+  let backgroundMode = false;
+  let gridVisible = false;
+  let previewMode = false;
+  let viewStates = [], activeViewIndex = 0, viewObserver = null, viewRefreshTimer = null;
+  let deepElementMode = false;
+  let loadToken = 0;
+  let loadedSlideIndex = -1, draggedSlideIndex = null, thumbTimer = null;
+  let selected = [];   // 다중 선택 배열 (selectedEl = primary)
+
+  const EDITOR_STYLE = `<style id="__editor">
+    .__sel { outline: 2px solid #7655ef !important; outline-offset: 1px; }
+    .__editing { outline: 2px solid #20a86b !important; outline-offset: 2px; }
+    .__handle { position: fixed; width: 12px; height: 12px; background: #fff; border: 2px solid #7655ef; border-radius: 2px; z-index: 2147483647; pointer-events: auto; }
+    .__rubber { position: fixed !important; z-index: 2147483646 !important; pointer-events: none !important; }
+    [data-editor-locked="true"] { cursor: not-allowed !important; }
+    [data-editor-hidden="true"] { display:none !important; }
+    [contenteditable="true"] { cursor: text !important; user-select: text !important; }
+    img, svg { -webkit-user-drag: none; user-select:none; }
+    * { cursor: default; }
+  </style>`;
+
+  const BLANK = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<style>body{margin:0;width:1280px;height:720px;overflow:hidden}#slide{width:1280px;height:720px;position:relative;background:#fff;font-family:Pretendard,'Noto Sans KR','Malgun Gothic',Arial,sans-serif}.slide-el{position:absolute;padding:6px}</style>
+</head><body><div id="slide"></div></body></html>`;
+</script>
+
+<script>
+
+  // ── 프로젝트 상태 ─────────────────────────────
+  let slides = [], current = 0;
+  let projectMode = 'general', pendingImportMode = 'general';
+  let generalZoom = 1;
+  let history = [], hptr = -1, clipboard = [];
+
+  const $ = id => document.getElementById(id);
+  function showWelcome(){document.body.classList.add('empty-project');$('thumbs').innerHTML='';}
+  function hideWelcome(){document.body.classList.remove('empty-project');}
+  function openImportMode(mode='general'){
+    pendingImportMode=mode==='presentation'?'presentation':'general';
+    $('fileInput').click();
+  }
+  function openHTMLDocument(raw,mode='general'){
+    if(viewObserver){viewObserver.disconnect();viewObserver=null;}
+    viewStates=[];activeViewIndex=0;previewMode=false;
+    document.body.classList.remove('multi-view','preview-mode');updatePreviewUI();
+    projectMode=mode==='presentation'?'presentation':'general';
+    generalZoom=1;
+    slides=[normalizeSlideHtml(raw)];current=0;history=[];hptr=-1;clipboard=[];
+    hideWelcome();pushHistory();loadSlide(0);renderThumbs();
+  }
+  function readHTMLFile(file,mode){
+    if(!file)return;
+    if(!/\.html?$/i.test(file.name||'')){alert('HTML 또는 HTM 파일을 선택해 주세요.');return;}
+    const r=new FileReader();r.onload=ev=>openHTMLDocument(String(ev.target.result||''),mode);r.readAsText(file,'utf-8');
+  }
+  function initWelcomeDrops(){
+    document.querySelectorAll('.welcome-drop').forEach(zone=>{
+      const mode=zone.dataset.importMode;
+      zone.addEventListener('click',()=>openImportMode(mode));
+      zone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openImportMode(mode);}});
+      ['dragenter','dragover'].forEach(name=>zone.addEventListener(name,e=>{e.preventDefault();e.stopPropagation();zone.classList.add('dragover');}));
+      ['dragleave','drop'].forEach(name=>zone.addEventListener(name,e=>{e.preventDefault();e.stopPropagation();zone.classList.remove('dragover');}));
+      zone.addEventListener('drop',e=>readHTMLFile(e.dataTransfer?.files?.[0],mode));
+    });
+  }
+  function switchRibbon(name, button) {
+    document.querySelectorAll('.ribbon-tab').forEach(tab => tab.classList.toggle('active', tab === button));
+    document.querySelectorAll('.ribbon-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.ribbon === name));
+    requestAnimationFrame(fitCanvas);
+  }
+
+  // ── 다중 화면 HTML을 원본 DOM 기반 가상 슬라이드로 편집 ──
+  // 특정 클래스명 대신, 같은 부모 아래에서 한 번에 하나만 보이는 화면 그룹을 탐지한다.
+  function cleanViewLabel(text){return String(text||'').replace(/\s+/g,' ').replace(/^[^\p{L}\p{N}]+/u,'').replace(/\s*\d+\s*$/,'').trim();}
+  function editorEsc(id){return (iwin.CSS&&iwin.CSS.escape)?iwin.CSS.escape(id):String(id).replace(/[^a-zA-Z0-9_-]/g,'\\$&');}
+  function shortLabel(el){
+    if(!el)return'';
+    const own=el.getAttribute('aria-label')||el.getAttribute('title')||el.querySelector?.('h1,h2,h3,h4,.page-title,.view-title,.title')?.textContent||'';
+    const cleaned=cleanViewLabel(own);return cleaned.length<=45?cleaned:'';
+  }
+  function buildFunctionMap(){
+    const source=[...idoc.scripts].map(s=>s.textContent||'').join('\n'),map={};
+    const re=/function\s+([\w$]+)\s*\([^)]*\)\s*\{/g;let m;
+    while((m=re.exec(source))){let i=re.lastIndex,depth=1,quote='',esc=false;
+      for(;i<source.length&&depth;i++){const ch=source[i];if(esc){esc=false;continue;}if(quote){if(ch==='\\')esc=true;else if(ch===quote)quote='';continue;}if(ch==='"'||ch==="'"||ch==='`'){quote=ch;continue;}if(ch==='{')depth++;else if(ch==='}')depth--;}
+      map[m[1]]=source.slice(re.lastIndex,i-1);
+    }
+    return map;
+  }
+  function expandedHandlerCode(el,fnMap){
+    let code=['onclick','href','aria-controls','data-target','data-bs-target','data-view','data-screen','data-page','data-tab'].map(a=>el.getAttribute(a)||'').join(' '),seen=new Set();
+    for(let pass=0;pass<4;pass++){
+      const names=[...code.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)].map(m=>m[1]);let added=false;
+      names.forEach(name=>{if(fnMap[name]&&!seen.has(name)){seen.add(name);code+=' '+fnMap[name];added=true;}});if(!added)break;
+    }
+    return code;
+  }
+  function controlLabelFor(target,controls,fnMap,directOnly=false){
+    const quoted=new RegExp(`['"#]${String(target.id).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}['"]`);
+    const matches=controls.map(el=>({el,raw:['onclick','href','aria-controls','data-target','data-bs-target','data-view','data-screen','data-page','data-tab'].map(a=>el.getAttribute(a)||'').join(' ')}))
+      .filter(x=>(directOnly?x.raw:expandedHandlerCode(x.el,fnMap)).match(quoted))
+      .map(x=>({label:cleanViewLabel(x.el.getAttribute('aria-label')||x.el.getAttribute('title')||x.el.textContent),inside:target.contains(x.el)}))
+      .filter(x=>x.label&&x.label.length<=45).sort((a,b)=>Number(b.inside)-Number(a.inside)||a.label.length-b.label.length);
+    return matches[0]?.label||'';
+  }
+  function findStateGroups(){
+    const controls=[...idoc.querySelectorAll('[onclick],[aria-controls],[data-target],[data-bs-target],[data-view],[data-screen],[data-page],[data-tab],a[href^="#"],[role="tab"]')],fnMap=buildFunctionMap();
+    const handlerCache=new WeakMap(),handler=el=>{if(!handlerCache.has(el))handlerCache.set(el,expandedHandlerCode(el,fnMap));return handlerCache.get(el);};
+    const referenced=id=>controls.some(el=>handler(el).includes(id));
+    const groups=[],seen=new Set(),activeTokens=['active','show','current','selected','open','visible'];
+    idoc.querySelectorAll('*').forEach(parent=>{
+      const children=[...parent.children].filter(el=>el.id&&!['SCRIPT','STYLE','LINK','META'].includes(el.tagName));if(children.length<2)return;
+      const buckets=new Map();children.forEach(el=>el.classList.forEach(cls=>{if(!buckets.has(cls))buckets.set(cls,[]);buckets.get(cls).push(el);}));
+      buckets.forEach((members,cls)=>{
+        if(members.length<2||members.length>40)return;
+        const key=members.map(el=>el.id).sort().join('|');if(seen.has(key))return;
+        const semantic=/(screen|view|page|panel|pane|tab|step|scene|route|section|sec|body|content)/i.test(cls);
+        const hiddenCount=members.filter(el=>iwin.getComputedStyle(el).display==='none'||el.hidden||el.getAttribute('aria-hidden')==='true').length;
+        const refCount=members.filter(el=>referenced(el.id)).length;
+        const activeToken=activeTokens.find(t=>members.some(el=>el.classList.contains(t)))||'';
+        if(!semantic&&!activeToken&&hiddenCount===0&&refCount<2)return;
+        if(!activeToken&&hiddenCount===0&&refCount<2)return;
+        seen.add(key);groups.push({key:'g'+groups.length,parent,members,memberIds:members.map(el=>el.id),activeToken,displayMode:!activeToken&&hiddenCount>0,controls,fnMap});
+      });
+    });
+    return groups;
+  }
+  function stateLabel(target,group,path){
+    const direct=controlLabelFor(target,group.controls,group.fnMap,true),heading=shortLabel(target),indirect=controlLabelFor(target,group.controls,group.fnMap,false);
+    return direct||heading||indirect||cleanViewLabel(target.id.replace(/[-_]+/g,' '))||'화면';
+  }
+  function detectViewStates(){
+    if(viewObserver){viewObserver.disconnect();viewObserver=null;}viewStates=[];activeViewIndex=0;
+    const groups=findStateGroups();
+    if(!groups.length){document.body.classList.remove('multi-view');if($('sidebarTitle'))$('sidebarTitle').textContent='HTML 페이지';return;}
+    const roots=groups.filter(g=>!groups.some(other=>other!==g&&other.members.some(m=>m.contains(g.parent))));
+    const walk=(group,path=[])=>group.members.forEach(target=>{
+      const next=[...path,{memberIds:group.memberIds,targetId:target.id,activeToken:group.activeToken,displayMode:group.displayMode}];
+      const nested=groups.filter(g=>g!==group&&target.contains(g.parent)&&!groups.some(mid=>mid!==group&&mid!==g&&target.contains(mid.parent)&&mid.members.some(m=>m.contains(g.parent))));
+      if(nested.length)nested.forEach(g=>walk(g,next));
+      else viewStates.push({key:next.map(x=>x.targetId).join('>'),label:stateLabel(target,group,next),path:next});
+    });
+    roots.forEach(g=>walk(g,[]));
+    const unique=new Map();viewStates.forEach(v=>unique.set(v.key,v));viewStates=[...unique.values()];
+    if(viewStates.length<2){viewStates=[];document.body.classList.remove('multi-view');if($('sidebarTitle'))$('sidebarTitle').textContent='HTML 페이지';return;}
+    document.body.classList.add('multi-view');if($('sidebarTitle'))$('sidebarTitle').textContent='화면 상태';
+    activeViewIndex=Math.max(0,viewStates.findIndex(v=>viewMatchesDocument(idoc,v)));
+    viewObserver=new MutationObserver(mutations=>{
+      syncActiveViewFromDOM();
+      const structural=mutations.some(m=>m.type==='childList'&&[...m.addedNodes,...m.removedNodes].some(n=>n.nodeType===1&&(n.id||n.querySelector?.('[id]'))));
+      if(structural){clearTimeout(viewRefreshTimer);viewRefreshTimer=setTimeout(refreshDynamicViews,180);}
+    });
+    viewObserver.observe(idoc.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','aria-selected']});
+  }
+  function refreshDynamicViews(){
+    if(!idoc||!idoc.body)return;
+    const oldKey=viewStates[activeViewIndex]?.key||'';
+    detectViewStates();
+    const found=viewStates.findIndex(v=>v.key===oldKey||viewMatchesDocument(idoc,v));if(found>=0)activeViewIndex=found;
+    renderThumbs();markActiveThumb();
+  }
+  function viewMatchesDocument(doc,view){
+    return view.path.every(step=>{
+      const target=doc.getElementById(step.targetId);if(!target)return false;
+      if(step.activeToken&&!target.classList.contains(step.activeToken))return false;
+      if(step.displayMode){const win=doc.defaultView,shown=win?win.getComputedStyle(target).display!=='none':target.style.display!=='none';if(!shown)return false;}
+      return true;
+    });
+  }
+  function applyViewState(doc,view){
+    view.path.forEach(step=>{
+      step.memberIds.forEach(id=>{const el=doc.getElementById(id);if(!el)return;
+        if(step.activeToken)el.classList.toggle(step.activeToken,id===step.targetId);
+        if(step.displayMode){if(id===step.targetId)el.style.removeProperty('display');else el.style.setProperty('display','none','important');}
+        if(el.hasAttribute('hidden'))el.hidden=id!==step.targetId;
+        if(el.hasAttribute('aria-hidden'))el.setAttribute('aria-hidden',id===step.targetId?'false':'true');
+        if(el.hasAttribute('aria-selected'))el.setAttribute('aria-selected',id===step.targetId?'true':'false');
+      });
+    });
+  }
+  function activateView(index){
+    if(!viewStates.length||!idoc)return;
+    activeViewIndex=Math.max(0,Math.min(viewStates.length-1,index));
+    if(editingEl)finishTextEdit();deselect();applyViewState(idoc,viewStates[activeViewIndex]);
+    iwin.scrollTo(0,0);markActiveThumb();renderLayers();
+  }
+  function syncActiveViewFromDOM(){
+    if(!viewStates.length)return;const found=viewStates.findIndex(v=>viewMatchesDocument(idoc,v));
+    if(found>=0&&found!==activeViewIndex){activeViewIndex=found;markActiveThumb();}
+  }
+  function updatePreviewUI(){const b=$('previewModeBtn');if(!b)return;b.classList.toggle('active',previewMode);b.textContent=previewMode?'■ 편집 모드로':'▷ 미리보기';document.body.classList.toggle('preview-mode',previewMode);}
+  function togglePreviewMode(force){
+    previewMode=typeof force==='boolean'?force:!previewMode;
+    if(previewMode){if(editingEl)finishTextEdit();deselect();hideCtx();}
+    else syncActiveViewFromDOM();
+    updatePreviewUI();renderLayers();
+  }
+  function virtualViewHTML(view){
+    const d=new DOMParser().parseFromString(snapshotHTML(false),'text/html');applyViewState(d,view);return '<!DOCTYPE html>\n'+d.documentElement.outerHTML;
+  }
+
+  // ── 슬라이드 로딩/전환 ────────────────────────
+  function loadDoc(html, slideIndex = current) {
+    resetInteractionState();
+    if(viewObserver){viewObserver.disconnect();viewObserver=null;}
+    const token = ++loadToken;
+    loadedSlideIndex = -1;
+    const normalized = normalizeSlideHtml(html);
+    const detected = detectCanvasSize(normalized);
+    const size = projectMode === 'presentation'
+      ? {...detected,w:1280,h:1440,sourceH:detected.sourceH||detected.h,explicitW:true,explicitH:true,longMode:(detected.sourceH||detected.h)>1440,locked:true}
+      : detected;
+    deepElementMode = projectMode === 'general';
+    if(projectMode==='general')applyGeneralViewportSize();else applyCanvasSize(size.w,size.h);
+    const injected = /<\/head>/i.test(normalized) ? normalized.replace(/<\/head>/i, EDITOR_STYLE + '</head>') : EDITOR_STYLE + normalized;
+    iframe.onload = () => {
+      if (token !== loadToken) return;
+      idoc = iframe.contentDocument; iwin = iframe.contentWindow;
+      loadedSlideIndex = slideIndex;
+      refineCanvasSize(size);
+      bind(); detectBackgroundLayer(); normalizeLayerBands(); detectViewStates(); updatePreviewUI(); deselect(); fitCanvas(); renderGrid(); renderThumbs();
+    };
+    iframe.srcdoc = injected;
+  }
+  function loadSlide(i) { current = i; slides[i] = normalizeSlideHtml(slides[i]); loadDoc(slides[i], i); markActiveThumb(); }
+  function gotoSlide(i) { if (i === current) return; commit(); loadSlide(i); }
+
+  // ── HTML 원본 크기 자동 감지 / 화면 맞춤 ─────────
+  function applyCanvasSize(w, h) {
+    SLIDE_W = Math.max(240, Math.min(10000, Math.round(w || 1280)));
+    SLIDE_H = Math.max(180, Math.min(20000, Math.round(h || 720)));
+    iframe.style.width = SLIDE_W + 'px';
+    iframe.style.height = SLIDE_H + 'px';
+  }
+  function applyGeneralViewportSize(){
+    const wrap=$('canvas-wrap'),toolbar=$('toolbar'),stage=$('stage');
+    if(!wrap||!stage)return;
+    const availableW=Math.max(480,Math.round(wrap.clientWidth-40));
+    const navigatorW=Math.round(toolbar?.getBoundingClientRect().width||availableW);
+    const w=Math.min(availableW,Math.max(480,navigatorW));
+    const h=Math.max(360,Math.round(wrap.clientHeight-(toolbar?.offsetHeight||70)-50));
+    applyCanvasSize(w,h);canvasScale=1;manualZoom=null;
+    stage.style.width=w+'px';stage.style.height=h+'px';iframe.style.transform='none';
+    const zi=$('zoomInfo');if(zi)zi.textContent=`${w}×${h} · ${Math.round(generalZoom*100)}%`;
+  }
+  function applyGeneralContentZoom(){
+    if(!idoc)return;
+    let st=idoc.getElementById('__editor_zoom');
+    if(!st){st=idoc.createElement('style');st.id='__editor_zoom';(idoc.head||idoc.documentElement).appendChild(st);}
+    st.textContent=`html{zoom:${generalZoom}!important}`;
+    const zi=$('zoomInfo');if(zi)zi.textContent=`${SLIDE_W}×${SLIDE_H} · ${Math.round(generalZoom*100)}%`;
+  }
+  function detectCanvasSize(html) {
+    try {
+      const d = new DOMParser().parseFromString(html, 'text/html'), root = d.getElementById('slide') || d.body;
+      const css = [...d.querySelectorAll('style')].map(s => s.textContent || '').join('\n');
+      const cssPx = (prop) => {
+        const selectors = root && root.id === 'slide' ? '(?:#slide|body|html)' : '(?:body|html|#app|#root)';
+        const m = css.match(new RegExp(selectors + '[^{]*\\{[^}]*\\b' + prop + '\\s*:\\s*([0-9.]+)px', 'i'));
+        return m ? parseFloat(m[1]) : 0;
+      };
+      const inline = (el, prop) => parseFloat(el?.style?.[prop]) || parseFloat(el?.getAttribute?.(prop)) || 0;
+      const w = inline(root,'width') || inline(d.body,'width') || inline(d.documentElement,'width') || cssPx('width');
+      const h = inline(root,'height') || inline(d.body,'height') || inline(d.documentElement,'height') || cssPx('height');
+      const actualW=w||1280,actualH=h||720,fixedLongH=longEditorHeight(actualW),longMode=actualH>fixedLongH*1.05;
+      return {w:actualW,h:longMode?fixedLongH:actualH,sourceH:actualH,explicitW:!!w,explicitH:!!h,longMode};
+    } catch (_) { return {w:1280,h:720,explicitW:false,explicitH:false}; }
+  }
+  function isPresentationHTML(html) {
+    try { return !!new DOMParser().parseFromString(html,'text/html').getElementById('slide'); }
+    catch(_){ return false; }
+  }
+  function longEditorHeight(w) { return Math.max(360,Math.min(4000,Math.round((w||1280)*9/8))); }
+  function enableLongPageScroll() {
+    if(!idoc||idoc.getElementById('__editor_scroll'))return;
+    const st=idoc.createElement('style');st.id='__editor_scroll';
+    st.textContent='html,body{overflow-y:auto!important;overflow-x:auto!important;max-height:none!important;scroll-behavior:auto!important}';
+    (idoc.head||idoc.documentElement).appendChild(st);
+  }
+  function refineCanvasSize(size) {
+    if (!idoc) return;
+    if(projectMode==='general'){
+      deepElementMode=true;enableLongPageScroll();applyGeneralViewportSize();applyGeneralContentZoom();return;
+    }
+    if(size.locked){
+      deepElementMode=false;
+      if((size.sourceH||0)>size.h)enableLongPageScroll();
+      if(SLIDE_W!==size.w||SLIDE_H!==size.h)applyCanvasSize(size.w,size.h);
+      return;
+    }
+    const root = idoc.getElementById('slide') || idoc.body, de = idoc.documentElement;
+    const w = size.explicitW ? size.w : Math.max(size.w, root?.scrollWidth||0, root?.offsetWidth||0, de?.scrollWidth||0);
+    const measuredH = Math.max(size.sourceH||size.h, root?.scrollHeight||0, root?.offsetHeight||0, de?.scrollHeight||0);
+    const fixedLongH=longEditorHeight(w),longMode=size.longMode||measuredH>fixedLongH*1.05;
+    const h=longMode?fixedLongH:measuredH;
+    deepElementMode=deepElementMode||longMode;
+    if(longMode)enableLongPageScroll();
+    if (Math.round(w) !== SLIDE_W || Math.round(h) !== SLIDE_H) applyCanvasSize(w,h);
+  }
+  function fitCanvas(resetManual = false) {
+    const stage = $('stage'), wrap = $('canvas-wrap'), toolbar = $('toolbar');
+    if (!stage || !wrap) return;
+    if(projectMode==='general'&&slides.length){if(resetManual){generalZoom=1;applyGeneralContentZoom();}applyGeneralViewportSize();return;}
+    const availW = Math.max(320, wrap.clientWidth - 24);
+    const availH = Math.max(180, wrap.clientHeight - (toolbar ? toolbar.offsetHeight : 0) - 36);
+    if (resetManual) manualZoom = null;
+    const fitted = Math.min(1, availW / SLIDE_W, availH / SLIDE_H);
+    canvasScale = manualZoom == null ? fitted : Math.min(2, Math.max(.2, manualZoom));
+    stage.style.width = Math.round(SLIDE_W * canvasScale) + 'px';
+    stage.style.height = Math.round(SLIDE_H * canvasScale) + 'px';
+    iframe.style.transform = `scale(${canvasScale})`;
+    const zi = $('zoomInfo');
+    if (zi) zi.textContent = `${SLIDE_W}×${SLIDE_H} · ${Math.round(canvasScale * 100)}%`;
+  }
+  function zoomBy(delta) {
+    if(projectMode==='general'&&slides.length){generalZoom=Math.min(2,Math.max(.4,generalZoom+delta));applyGeneralContentZoom();updateHandles();return;}
+    manualZoom = Math.min(2, Math.max(.2, (manualZoom == null ? canvasScale : manualZoom) + delta));
+    fitCanvas();
+  }
+
+  // 원본 HTML의 좌표와 스타일은 변경하지 않는다.
+  function normalizeSlideHtml(html) {
+    return String(html || '');
+  }
+
+  function slideRoot() { return idoc.getElementById('slide') || idoc.body; }
+  function resetInteractionState() {
+    clearTimeout(ct); clearTimeout(thumbTimer);
+    if (editingEl && editingEl.isConnected) {
+      editingEl.classList.remove('__editing');
+      editingEl.removeAttribute('contenteditable');
+    }
+    editingEl = null;
+    selected.forEach(el => { if (el && el.classList) el.classList.remove('__sel'); });
+    selected = []; selectedEl = null;
+    clearHandles();
+    if (rubber && rubber.isConnected) rubber.remove();
+    rubber = null; dragging = false; resizing = false; selecting = false; justDragged = false; moved = false; dragArmed = false;
+    backgroundMode = false;
+    updateBackgroundModeUI();
+  }
+  function detectBackgroundLayer() {
+    // 원본 HTML의 레이어 의미를 임의로 변경하지 않는다.
+  }
+  function isBackgroundElement(el) {
+    return !!el && (el === slideRoot() || el.dataset.slideBackground === 'true');
+  }
+  function backgroundTarget() {
+    return slideRoot();
+  }
+  function prepareBackgroundStacking(el) {
+    const root=slideRoot();
+    if(iwin.getComputedStyle(root).position==='static')root.style.position='relative';
+    root.style.isolation='isolate';
+    if(el&&el!==root){
+      el.dataset.slideBackground='true';
+      el.dataset.backgroundObject='true';
+      el.style.zIndex='-10000';
+    }
+  }
+  function repairBackgroundStacking(){
+    prepareBackgroundStacking();
+    slideRoot().querySelectorAll('[data-slide-background="true"]').forEach(prepareBackgroundStacking);
+  }
+  function updateBackgroundModeUI() {
+    const wrap = $('canvas-wrap'), btn = $('bgModeBtn'), banner = $('bgEditBanner');
+    if (wrap) wrap.classList.toggle('bg-mode', backgroundMode);
+    if (btn) { btn.classList.toggle('active', backgroundMode); btn.textContent = backgroundMode ? '✓ 배경 편집 중' : '배경 편집'; }
+    if (banner) banner.classList.toggle('show', backgroundMode);
+  }
+  function updateGridUI(){
+    const btn=$('gridModeBtn');if(!btn)return;
+    btn.classList.toggle('active',gridVisible);btn.textContent=gridVisible?'✓ 격자 보기':'격자 보기';
+  }
+  function renderGrid(){
+    if(!idoc)return;
+    let grid=idoc.getElementById('__editor_grid');
+    if(!gridVisible){if(grid)grid.remove();updateGridUI();return;}
+    if(!grid){grid=idoc.createElement('div');grid.id='__editor_grid';grid.setAttribute('aria-hidden','true');idoc.body.appendChild(grid);}
+    const root=slideRoot(),de=idoc.documentElement;
+    const w=Math.max(SLIDE_W,root?.scrollWidth||0,root?.offsetWidth||0,de?.scrollWidth||0);
+    const h=Math.max(SLIDE_H,root?.scrollHeight||0,root?.offsetHeight||0,de?.scrollHeight||0);
+    const props={position:'absolute',left:'0',top:'0',width:w+'px',height:h+'px',zIndex:'2147483645',pointerEvents:'none',userSelect:'none',backgroundImage:'radial-gradient(circle, rgba(93,76,170,.35) 0 0.05cm, transparent 0.055cm)',backgroundSize:'1cm 1cm',backgroundPosition:'0 0',backgroundRepeat:'repeat'};
+    Object.entries(props).forEach(([k,v])=>grid.style.setProperty(k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase()),v,'important'));
+    updateGridUI();
+  }
+  function toggleGrid(force){gridVisible=typeof force==='boolean'?force:!gridVisible;renderGrid();}
+  function toggleBackgroundMode(force) {
+    if (!idoc) return;
+    backgroundMode = typeof force === 'boolean' ? force : !backgroundMode;
+    updateBackgroundModeUI();
+    if (backgroundMode) { repairBackgroundStacking(); select(backgroundTarget(), false, true); }
+    else if (selectedEl && isBackgroundElement(selectedEl)) deselect();
+  }
+  function pickTarget(t, parentStep = false) {
+    if (!t || t === idoc.documentElement || t === idoc.body) return slideRoot();
+    if (t.classList && t.classList.contains('__handle')) return selectedEl;
+    if (backgroundMode) {
+      const bg = t.closest && t.closest('[data-slide-background="true"]');
+      return bg && bg !== slideRoot() && slideRoot().contains(bg) ? bg : slideRoot();
+    }
+    if (deepElementMode) {
+      let picked=t;
+      while(picked&&picked!==slideRoot()){
+        const r=picked.getBoundingClientRect?.();
+        if(r&&r.width>=1&&r.height>=1)break;
+        picked=picked.parentElement;
+      }
+      if(parentStep&&picked&&picked!==slideRoot()){
+        const parent=picked.parentElement;
+        if(parent&&parent!==idoc.body&&parent!==idoc.documentElement) picked=parent;
+      }
+      return picked&&slideRoot().contains(picked)&&!isBackgroundElement(picked)?picked:slideRoot();
+    }
+    const g = t.closest && t.closest('.slide-group');
+    if (g) return g;
+    const explicit = t.closest && t.closest('[data-slide-layer], .slide-el');
+    if (explicit && slideRoot().contains(explicit)) {
+      // 명시 레이어 안에서도 이미지·SVG 같은 실제 객체는 직접 선택한다.
+      const direct = t.closest('img,svg,video,canvas,iframe,table,h1,h2,h3,h4,h5,h6,p,blockquote,button,strong,small,label');
+      const picked = direct && explicit.contains(direct) ? direct : explicit;
+      return isBackgroundElement(picked) ? slideRoot() : picked;
+    }
+    const semantic = t.closest && t.closest('img,svg,video,canvas,iframe,table,h1,h2,h3,h4,h5,h6,p,blockquote,button,a,span,strong,small,label');
+    if (semantic && slideRoot().contains(semantic)) return isBackgroundElement(semantic) ? slideRoot() : semantic;
+    // 구조용 래퍼만 강제로 선택하지 않고 실제 클릭 대상을 객체로 취급한다.
+    const picked = slideRoot().contains(t) ? t : slideRoot();
+    return isBackgroundElement(picked) ? slideRoot() : picked;
+  }
+
+  function editableLayers() {
+    if(deepElementMode){
+      return [...slideRoot().querySelectorAll('*')].filter(el=>{
+        if(el.id==='__editor_grid'||el.classList.contains('__handle')||el.classList.contains('__rubber')||['SCRIPT','STYLE','LINK','META'].includes(el.tagName))return false;
+        const r=el.getBoundingClientRect(),cs=iwin.getComputedStyle(el),media=/^(IMG|SVG|VIDEO|CANVAS|IFRAME|TABLE|RECT|CIRCLE|ELLIPSE|LINE|PATH|POLYGON|POLYLINE|TEXT|TSPAN)$/i.test(el.tagName);
+        return r.width>=1&&r.height>=1&&cs.display!=='none'&&cs.visibility!=='hidden'&&(el.children.length===0||media);
+      }).slice(0,700);
+    }
+    const explicit = [...slideRoot().querySelectorAll('[data-slide-layer], .slide-el')].filter(el => {
+      const group = el.closest('.slide-group');
+      return !group || group === el;
+    });
+    const base = explicit.length ? explicit : [...slideRoot().children];
+    return base.filter(el => el.id!=='__editor_grid' && !el.classList.contains('__handle') && !el.classList.contains('__rubber'));
+  }
+
+  // ── iframe 이벤트 바인딩 ──────────────────────
+  function bind() {
+    idoc.addEventListener('click', e => {
+      if(previewMode){setTimeout(syncActiveViewFromDOM,0);return;}
+      if (editingEl) {
+        if (editingEl.contains(e.target)) { e.stopImmediatePropagation(); return; }  // 원본 onclick은 막고 커서 이동만 허용한다.
+        finishTextEdit();
+      }
+      e.preventDefault(); // 편집 중 링크 이동이나 버튼 실행을 막는다.
+      e.stopImmediatePropagation(); // 불러온 HTML의 자체 클릭 편집창 생성을 차단한다.
+      if (justDragged) { justDragged = false; e.preventDefault(); }
+    }, true);
+    idoc.addEventListener('mousedown', startDrag);
+    idoc.addEventListener('mousemove', onMove);
+    idoc.addEventListener('mouseup', endMove);
+    idoc.addEventListener('dblclick', e => {
+      if(previewMode)return;
+      const el = textTarget(e.target, e);
+      if (!el || el === slideRoot()) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      select(el);
+      beginTextEdit(el, e);
+    }, true);
+    idoc.addEventListener('blur', e => { if (e.target === editingEl) finishTextEdit(); }, true);
+    idoc.addEventListener('input', () => { clearTimeout(thumbTimer); thumbTimer = setTimeout(renderThumbs, 100); });
+    idoc.addEventListener('dragover', e => e.preventDefault());
+    idoc.addEventListener('drop', onDropImage);
+    idoc.addEventListener('paste', onPasteImage);
+    idoc.addEventListener('keydown', keyHandler);
+    idoc.addEventListener('contextmenu', e => {
+      if(previewMode)return;
+      e.preventDefault();
+      const el = pickTarget(e.target,e.altKey);
+      if (el !== slideRoot() && !selected.includes(el)) select(el);
+      const ir = iframe.getBoundingClientRect();
+      showCtx(ir.left + e.clientX * canvasScale, ir.top + e.clientY * canvasScale);
+    });
+    idoc.addEventListener('mousedown', hideCtx);
+    const followScroll=()=>{updateHandles();hideCtx();};
+    idoc.addEventListener('scroll',followScroll,true);
+    iwin.addEventListener('scroll',followScroll,{passive:true});
+    iwin.addEventListener('blur', endMove);
+  }
+
+  // ── 텍스트 편집 / 커서 위치 ─────────────────────
+  function beginTextEdit(el, e) {
+    if (el.dataset.editorLocked === 'true' || isBackgroundElement(el)) return;
+    if (editingEl && editingEl !== el) finishTextEdit();
+    editingEl = el;
+    el.classList.add('__editing');
+    el.contentEditable = 'true';
+    el.spellcheck = false;
+    el.focus({ preventScroll: true });
+    placeCaretFromEvent(el, e);
+  }
+  function finishTextEdit() {
+    if (!editingEl) return;
+    const el = editingEl;
+    editingEl = null;
+    el.classList.remove('__editing');
+    el.removeAttribute('contenteditable');
+    if (iwin && iwin.getSelection) iwin.getSelection().removeAllRanges();
+    commitChange();
+  }
+  function textTarget(t, event) {
+    if (!t || !slideRoot().contains(t)) return null;
+    if (backgroundMode) return null;
+    if (iwin.getSelection && idoc.caretRangeFromPoint) {
+      if (event && Number.isFinite(event.clientX)) {
+        const cr = idoc.caretRangeFromPoint(event.clientX, event.clientY);
+        let node = cr && cr.startContainer;
+        if (node && node.nodeType === 3) node = node.parentElement;
+        if (node && slideRoot().contains(node) && !isBackgroundElement(node)) {
+          const block = node.closest('h1,h2,h3,h4,h5,h6,p,blockquote,li,td,th,button,a,span,strong,small,label,div');
+          if (block && block !== slideRoot() && !isBackgroundElement(block)) return block;
+        }
+      }
+    }
+    const direct = t.closest && t.closest('h1,h2,h3,h4,h5,h6,p,blockquote,li,td,th,button,a,span,strong,small,label');
+    if (direct) return direct;
+    const picked = pickTarget(t);
+    if (picked && picked.tagName !== 'IMG' && picked.tagName !== 'SVG' && (picked.textContent || '').trim()) return picked;
+    return null;
+  }
+  function placeCaretFromEvent(el, e) {
+    const sel = iwin.getSelection();
+    let range = null;
+    if (e && idoc.caretRangeFromPoint) range = idoc.caretRangeFromPoint(e.clientX, e.clientY);
+    else if (e && idoc.caretPositionFromPoint) {
+      const pos = idoc.caretPositionFromPoint(e.clientX, e.clientY);
+      if (pos) { range = idoc.createRange(); range.setStart(pos.offsetNode, pos.offset); }
+    }
+    if (!range || !el.contains(range.startContainer)) {
+      range = idoc.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+    }
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // ── 선택 + 리사이즈 핸들 ──────────────────────
+  let handles = [];
+  function clearHandles() { handles.forEach(h => h.remove()); handles = []; }
+  function makeHandles() {
+    clearHandles();
+    if (!selectedEl || selectedEl === slideRoot()) return;
+    ['nw','n','ne','e','se','s','sw','w'].forEach(d => {
+      const h = idoc.createElement('div');
+      h.className = '__handle'; h.dataset.dir = d; h.style.cursor = d + '-resize';
+      idoc.body.appendChild(h); handles.push(h);
+    });
+    updateHandles();
+  }
+  function updateHandles() {
+    if (!handles.length || !selectedEl) return;
+    // getBoundingClientRect 차이로 슬라이드 기준 좌표 계산 → 중첩 요소도 정확
+    const r = selectedEl.getBoundingClientRect();
+    const x = r.left, y = r.top, w = r.width, h = r.height;
+    const p = { nw:[x,y], n:[x+w/2,y], ne:[x+w,y], e:[x+w,y+h/2], se:[x+w,y+h], s:[x+w/2,y+h], sw:[x,y+h], w:[x,y+h/2] };
+    handles.forEach(hd => { const [px,py] = p[hd.dataset.dir]; hd.style.left = (px-5.5)+'px'; hd.style.top = (py-5.5)+'px'; });
+  }
+
+  function select(el, add, allowBackground = false) {
+    if (!el) return;
+    if (isBackgroundElement(el) && !backgroundMode && !allowBackground) { deselect(); return; }
+    if (backgroundMode && !isBackgroundElement(el)) el = backgroundTarget();
+    if (!add) {
+      selected.forEach(s => s.classList.remove('__sel'));
+      selected = [];
+    }
+    if (add && selected.includes(el)) {
+      selected = selected.filter(s => s !== el);
+      el.classList.remove('__sel');
+    } else if (!selected.includes(el)) {
+      selected.push(el);
+      el.classList.add('__sel');
+    }
+    selectedEl = selected[selected.length - 1] || null;
+    refreshSelUI();
+  }
+  function deselect() {
+    selected.forEach(s => s.classList.remove('__sel'));
+    selected = []; selectedEl = null; clearHandles(); updateGroupBar();
+    $('no-selection').style.display = 'block';
+    $('props').style.display = 'none';
+    renderLayers();
+  }
+  function refreshSelUI() {
+    clearHandles();
+    if (!selectedEl) { deselect(); return; }
+    if (selected.length === 1 && selectedEl !== slideRoot()) makeHandles();
+    syncPanel(); updateGroupBar();
+    $('no-selection').style.display = 'none';
+    $('props').style.display = 'block';
+    renderLayers();
+  }
+  function updateGroupBar() {
+    const isGroup = selectedEl && selectedEl.classList && selectedEl.classList.contains('slide-group');
+    $('btnGroup').style.display = selected.length >= 2 && !backgroundMode ? 'block' : 'none';
+    $('btnUngroup').style.display = isGroup ? 'block' : 'none';
+    $('selCount').textContent = selected.length >= 2 ? selected.length + '개 선택됨' : '';
+  }
+
+  function layerLabel(el) {
+    if (el.classList.contains('slide-group')) return '그룹';
+    if (el.tagName === 'IMG') return '이미지';
+    if (el.tagName === 'SVG') return '그래픽';
+    const txt = (el.textContent || '').trim().replace(/\s+/g,' ');
+    return txt ? txt.slice(0, 26) : (el.tagName.toLowerCase() + ' 객체');
+  }
+  function layerIcon(el) {
+    if (el.classList.contains('slide-group')) return '▦';
+    if (el.tagName === 'IMG') return '▧';
+    if ((el.textContent || '').trim()) return 'T';
+    return '◆';
+  }
+  function renderLayers() {
+    const box = $('layers'); if (!box || !idoc) return;
+    box.innerHTML = '';
+    const layers = editableLayers().filter(el => el !== slideRoot() && (backgroundMode ? isBackgroundElement(el) : !isBackgroundElement(el))).reverse();
+    layers.forEach(el => {
+      const row = document.createElement('div');
+      row.className = 'layer-row' + (selected.includes(el) ? ' active' : '');
+      row.innerHTML = `<span class="layer-icon">${layerIcon(el)}</span><span class="layer-name"></span><button class="layer-action vis" title="숨기기/표시">${el.dataset.editorHidden === 'true' ? '○' : '●'}</button><button class="layer-action lock" title="잠금/해제">${el.dataset.editorLocked === 'true' ? '🔒' : '◇'}</button>`;
+      row.querySelector('.layer-name').textContent = layerLabel(el);
+      row.addEventListener('click', ev => select(el, ev.ctrlKey || ev.metaKey || ev.shiftKey));
+      row.querySelector('.vis').addEventListener('click', ev => {
+        ev.stopPropagation();
+        const hiding = el.dataset.editorHidden !== 'true';
+        if (hiding) { el.dataset.editorDisplay = el.style.display || ''; el.dataset.editorHidden = 'true'; el.style.display = 'none'; }
+        else { el.dataset.editorHidden = 'false'; el.style.display = el.dataset.editorDisplay || ''; }
+        if (hiding && selected.includes(el)) deselect();
+        commitChange();
+      });
+      row.querySelector('.lock').addEventListener('click', ev => { ev.stopPropagation(); el.dataset.editorLocked = el.dataset.editorLocked === 'true' ? 'false' : 'true'; commitChange(); renderLayers(); });
+      box.appendChild(row);
+    });
+    if (!layers.length) box.innerHTML = '<div style="font-size:11px;color:#9aa0aa;padding:8px 2px">레이어가 없습니다</div>';
+  }
+
+  // ── 드래그 / 리사이즈 / 러버밴드 ──────────────
+  let dragging = false, resizing = false, selecting = false, justDragged = false, moved = false, dragArmed = false;
+  let rdir = '', rs = {}, dragMouse = {}, dragStart = [], rubber = null, rbStart = {};
+  const DRAG_THRESH = 4;   // 이 거리 이상 움직여야 실제 이동 시작 (미세 떨림 무시)
+  function ensureTransformState(el) {
+    if (el.dataset.editorBaseTransform !== undefined) return;
+    const tf = el.style.transform || '';
+    el.dataset.editorRot = String(getRotation(tf));
+    el.dataset.editorBaseTransform = tf.replace(/rotate\((-?[\d.]+)deg\)/g, '').trim();
+    el.dataset.editorTx = '0'; el.dataset.editorTy = '0';
+  }
+  function applyEditorTransform(el) {
+    ensureTransformState(el);
+    const tx = parseFloat(el.dataset.editorTx) || 0, ty = parseFloat(el.dataset.editorTy) || 0;
+    const rot = parseFloat(el.dataset.editorRot) || 0, base = el.dataset.editorBaseTransform || '';
+    el.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg) ${base}`.trim();
+  }
+  function translateEl(el, tx, ty) {
+    ensureTransformState(el);
+    el.dataset.editorTx = String(Math.round(tx * 100) / 100);
+    el.dataset.editorTy = String(Math.round(ty * 100) / 100);
+    applyEditorTransform(el);
+  }
+  function moveElBy(el, dx, dy) {
+    ensureTransformState(el);
+    translateEl(el, (parseFloat(el.dataset.editorTx)||0) + dx, (parseFloat(el.dataset.editorTy)||0) + dy);
+  }
+  function startDrag(e) {
+    if(previewMode)return;
+    if (e.button !== 0) return;
+    if (editingEl) {
+      if (editingEl.contains(e.target)) return;  // 글자 안에서는 드래그 선택/커서 이동을 브라우저에 맡긴다.
+      finishTextEdit();
+    }
+    // 리사이즈 핸들
+    if (e.target.classList && e.target.classList.contains('__handle')) {
+      if (!selectedEl || selectedEl.dataset.editorLocked === 'true') return;
+      ensureTransformState(selectedEl);
+      resizing = true; rdir = e.target.dataset.dir;
+      rs = { x:e.clientX, y:e.clientY, w:selectedEl.getBoundingClientRect().width, h:selectedEl.getBoundingClientRect().height,
+        tx:parseFloat(selectedEl.dataset.editorTx)||0, ty:parseFloat(selectedEl.dataset.editorTy)||0 };
+      e.preventDefault(); return;
+    }
+    const el = pickTarget(e.target,e.altKey);
+    // 빈 배경에서 시작 → 러버밴드(영역 드래그 선택)
+    if (el === slideRoot()) {
+      if (backgroundMode) { select(el, false, true); e.preventDefault(); return; }
+      if (!e.shiftKey) deselect();
+      selecting = true; rbStart = { x:e.clientX, y:e.clientY };
+      rubber = idoc.createElement('div'); rubber.className = '__rubber';
+      rubber.style.cssText = 'position:fixed;border:1px solid #4a9eff;background:rgba(74,158,255,0.15);pointer-events:none;';
+      idoc.body.appendChild(rubber);
+      e.preventDefault(); return;
+    }
+    // 이미 선택된 요소 위에서 시작하면 선택 유지(다중 이동), 아니면 새로 선택
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (additive && selected.includes(el)) { select(el, true); e.preventDefault(); return; }
+    if (!selected.includes(el)) select(el, additive);
+    if (!selected.includes(el) || el.dataset.editorLocked === 'true' || e.detail > 1) return;
+    // 이동 준비: 선택된 모든 요소의 시작 좌표 기록 (델타 이동)
+    dragMouse = { x:e.clientX, y:e.clientY };
+    dragStart = selected.filter(s => s !== slideRoot() && s.dataset.editorLocked !== 'true').map(s => {
+      ensureTransformState(s);
+      return { el:s, tx:parseFloat(s.dataset.editorTx)||0, ty:parseFloat(s.dataset.editorTy)||0 };
+    });
+    if (dragStart.length) { dragArmed = true; dragging = false; moved = false; e.preventDefault(); }
+  }
+  function onMove(e) {
+    if (resizing) {
+      const dx = e.clientX - rs.x, dy = e.clientY - rs.y;
+      let { w, h } = rs;
+      if (rdir.includes('e')) w = rs.w + dx;
+      if (rdir.includes('s')) h = rs.h + dy;
+      if (rdir.includes('w')) w = rs.w - dx;
+      if (rdir.includes('n')) h = rs.h - dy;
+      w = Math.max(10, w); h = Math.max(10, h);
+      const s = selectedEl.style;
+      s.width = w+'px'; s.height = h+'px';
+      translateEl(selectedEl, rs.tx + (rdir.includes('w') ? rs.w - w : 0), rs.ty + (rdir.includes('n') ? rs.h - h : 0));
+      updateHandles(); syncPanel(); return;
+    }
+    if (selecting && rubber) {
+      const x1 = Math.min(rbStart.x, e.clientX), y1 = Math.min(rbStart.y, e.clientY);
+      const x2 = Math.max(rbStart.x, e.clientX), y2 = Math.max(rbStart.y, e.clientY);
+      rubber.style.left = x1+'px'; rubber.style.top = y1+'px';
+      rubber.style.width = (x2 - x1)+'px'; rubber.style.height = (y2 - y1)+'px';
+      return;
+    }
+    if (dragArmed && !dragging) {
+      if (Math.abs(e.clientX - dragMouse.x) < DRAG_THRESH && Math.abs(e.clientY - dragMouse.y) < DRAG_THRESH) return;
+      dragging = true;   // 임계값 통과 → 실제 이동 시작
+    }
+    if (dragging) {
+      const dx = e.clientX - dragMouse.x, dy = e.clientY - dragMouse.y;
+      if (dx || dy) moved = true;
+      dragStart.forEach(d => translateEl(d.el, d.tx + dx, d.ty + dy));
+      updateHandles();
+      if (selectedEl) syncPositionFields();
+    }
+  }
+  function endMove() {
+    if (selecting) {
+      selecting = false;
+      const rbR = rubber.getBoundingClientRect(); rubber.remove(); rubber = null;
+      // 러버밴드와 겹치는 독립 레이어 선택
+      editableLayers().forEach(el => {
+        if (isBackgroundElement(el)) return;
+        const r = el.getBoundingClientRect();
+        const hit = !(r.right < rbR.left || r.left > rbR.right || r.bottom < rbR.top || r.top > rbR.bottom);
+        if (hit && !selected.includes(el)) { selected.push(el); el.classList.add('__sel'); }
+      });
+      selectedEl = selected[selected.length - 1] || null;
+      refreshSelUI(); justDragged = true;
+      return;
+    }
+    if (resizing) { resizing = false; commitChange(); }
+    if (dragArmed) { dragArmed = false; if (dragging) { dragging = false; if (moved) { justDragged = true; commitChange(); } } }
+  }
+
+  // ── 패널 동기화 ───────────────────────────────
+  function visualPosition(el) {
+    const r = el.getBoundingClientRect(), rr = slideRoot().getBoundingClientRect();
+    return { x:r.left-rr.left, y:r.top-rr.top };
+  }
+  function syncPositionFields() {
+    if (!selectedEl) return;
+    const p = visualPosition(selectedEl);
+    $('posX').value = Math.round(p.x); $('posY').value = Math.round(p.y);
+  }
+  function syncPanel() {
+    if (!selectedEl) return;
+    const cs = iwin.getComputedStyle(selectedEl), inl = selectedEl.style;
+    $('tag').textContent = isBackgroundElement(selectedEl) ? (backgroundMode ? '배경 · 편집 중' : '슬라이드 배경') :
+      selectedEl.classList.contains('slide-group') ? '그룹' :
+      selectedEl.tagName === 'IMG' ? '이미지' : selectedEl.tagName === 'SVG' ? '그래픽' :
+      (selectedEl.textContent || '').trim() ? '텍스트' : '도형';
+    syncPositionFields();
+    const selectedRect=selectedEl.getBoundingClientRect();
+    $('w').value = Math.round(selectedEl.offsetWidth||selectedRect.width);
+    $('h').value = Math.round(selectedEl.offsetHeight||selectedRect.height);
+    $('rot').value = selectedEl.dataset.editorRot !== undefined ? (parseFloat(selectedEl.dataset.editorRot)||0) : getRotation(inl.transform);
+    $('opacity').value = Math.round((parseFloat(cs.opacity) || 1) * 100);
+    $('fontSize').value = parseInt(cs.fontSize) || 16;
+    syncFontFamilySelect(cs.fontFamily);
+    $('fontColor').value = rgbToHex(cs.color);
+    $('align').value = cs.textAlign === 'start' ? 'left' : cs.textAlign;
+    $('weight').value = (parseInt(cs.fontWeight) >= 600 || cs.fontWeight === 'bold') ? 'bold' : 'normal';
+    $('lh').value = (parseFloat(cs.lineHeight) / (parseFloat(cs.fontSize) || 16)).toFixed(1);
+    $('bg').value = rgbToHex(cs.backgroundColor);
+    $('radius').value = parseInt(cs.borderRadius) || 0;
+    $('bw').value = parseInt(cs.borderWidth) || 0;
+    $('bc').value = rgbToHex(cs.borderColor);
+    $('shadow').value = inl.boxShadow || 'none';
+  }
+  function primaryFontName(value) { return (value || '').split(',')[0].replace(/['"]/g,'').trim().toLowerCase(); }
+  function syncFontFamilySelect(value) { const select=$('fontFamily'), primary=primaryFontName(value), match=[...select.options].find(option=>primaryFontName(option.value)===primary); if(match) select.value=match.value; }
+  function addLocalFontOptions(families, filterCandidates = true) {
+    const select=$('fontFamily'), old=$('pcFontsGroup'); if(old) old.remove();
+    const group=document.createElement('optgroup'); group.id='pcFontsGroup'; group.label=`PC 설치 글꼴 (${families.length})`;
+    families.forEach(family=>{const option=document.createElement('option');option.value=`'${family.replace(/'/g,"\\'")}',Pretendard,'Noto Sans KR','Malgun Gothic',sans-serif`;option.textContent=family;group.appendChild(option);});
+    select.insertBefore(group, select.firstChild);
+    if (filterCandidates) { const installed=new Set(families.map(name=>name.toLowerCase())); [...select.querySelectorAll('optgroup:not(#pcFontsGroup) option')].forEach(option=>{const name=primaryFontName(option.value), found=installed.has(name)||[...installed].some(local=>local.startsWith(name+' ')||name.startsWith(local+' '));option.hidden=!found;option.disabled=!found;}); [...select.querySelectorAll('optgroup:not(#pcFontsGroup)')].forEach(g=>g.hidden=![...g.querySelectorAll('option')].some(o=>!o.hidden)); }
+  }
+  async function loadLocalFonts() {
+    const status=$('fontStatus');
+    if ('queryLocalFonts' in window) {
+      try {
+        status.textContent='PC 글꼴을 확인하는 중입니다…';
+        const fonts=await window.queryLocalFonts(), families=[...new Set(fonts.map(font=>font.family).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+        addLocalFontOptions(families); status.textContent=`설치된 글꼴 ${families.length}개를 불러왔습니다.`; return;
+      } catch(err) { status.textContent='글꼴 접근이 차단되었습니다. 브라우저 권한을 허용해 주세요.'; }
+    }
+    const name=prompt('추가할 글꼴의 정확한 이름을 입력하세요.\n예: Pretendard Variable'); if(!name)return;
+    const current=[...($('pcFontsGroup')?.querySelectorAll('option')||[])].map(o=>o.textContent); addLocalFontOptions([...new Set([...current,name.trim()])].sort((a,b)=>a.localeCompare(b,'ko')), false); status.textContent=`${name.trim()}을(를) 목록에 추가했습니다.`;
+  }
+  function getRotation(tf) { if (!tf) return 0; const m = tf.match(/rotate\((-?[\d.]+)deg\)/); return m ? +m[1] : 0; }
+
+  // ── 속성 → 즉시 반영 (디바운스 커밋) ──────────
+  let ct;
+  function debCommit() { clearTimeout(ct); ct = setTimeout(commitChange, 350); }
+  function canEditSelected() { return selectedEl && selectedEl.dataset.editorLocked !== 'true'; }
+  function set(id, fn) { $(id).addEventListener('input', () => { if (!canEditSelected()) return; fn(selectedEl.style, $(id).value); updateHandles(); debCommit(); }); }
+  $('posX').addEventListener('input', () => { if (!canEditSelected()) return; const p=visualPosition(selectedEl); moveElBy(selectedEl, (+$('posX').value||0)-p.x, 0); updateHandles(); debCommit(); });
+  $('posY').addEventListener('input', () => { if (!canEditSelected()) return; const p=visualPosition(selectedEl); moveElBy(selectedEl, 0, (+$('posY').value||0)-p.y); updateHandles(); debCommit(); });
+  set('w', (s,v) => s.width = v+'px');
+  set('h', (s,v) => s.height = v+'px');
+  $('rot').addEventListener('input', () => { if (!canEditSelected()) return; ensureTransformState(selectedEl); selectedEl.dataset.editorRot = String(+$('rot').value||0); applyEditorTransform(selectedEl); updateHandles(); debCommit(); });
+  set('opacity', (s,v) => s.opacity = v/100);
+  set('fontSize', (s,v) => s.fontSize = v+'px');
+  set('fontColor', (s,v) => s.color = v);
+  set('align', (s,v) => s.textAlign = v);
+  set('weight', (s,v) => s.fontWeight = v);
+  set('lh', (s,v) => s.lineHeight = v);
+  set('bg', (s,v) => s.background = v);
+  set('radius', (s,v) => s.borderRadius = v+'px');
+  set('bw', (s,v) => { s.borderStyle = 'solid'; s.borderWidth = v+'px'; });
+  set('bc', (s,v) => s.borderColor = v);
+  set('shadow', (s,v) => s.boxShadow = v === 'none' ? '' : v);
+  $('fontFamily').addEventListener('change', () => { if (selectedEl) { selectedEl.style.fontFamily = $('fontFamily').value; commitChange(); } });
+
+  function clearBg() { if (selectedEl) { selectedEl.style.background = 'transparent'; $('bg').value = '#ffffff'; commitChange(); } }
+  function applyGradient() { if (selectedEl) { selectedEl.style.background = `linear-gradient(${$('gAngle').value}deg, ${$('g1').value}, ${$('g2').value})`; commitChange(); } }
+  function moveBackgroundOrder(el, d, extreme = false) {
+    const root = slideRoot(), list = [...root.children].filter(isBackgroundElement), idx = list.indexOf(el); if (idx < 0) return;
+    prepareBackgroundStacking(el);
+    if (extreme && d > 0) { const firstContent = [...root.children].find(c => c !== el && !isBackgroundElement(c)); root.insertBefore(el, firstContent || null); }
+    else if (extreme && d < 0) { const first = list.find(c => c !== el); if (first) root.insertBefore(el, first); }
+    else if (d > 0 && idx < list.length - 1) root.insertBefore(list[idx + 1], el);
+    else if (d < 0 && idx > 0) root.insertBefore(el, list[idx - 1]);
+  }
+  function topLayer(el) { let node=el; while (node && node.parentElement && node.parentElement !== slideRoot()) node=node.parentElement; return node && node.parentElement === slideRoot() ? node : el; }
+  function selectedZLayers() { return [...new Set(selected.filter(el => el !== slideRoot()).map(topLayer))]; }
+  function prepareZLayer(el) { if (iwin.getComputedStyle(el).position === 'static') el.style.position='relative'; }
+  function normalZLayers() { return [...slideRoot().children].filter(el => !isBackgroundElement(el) && !el.classList.contains('__handle') && !el.classList.contains('__rubber')); }
+  function normalizeLayerBands() {
+    // 불러오기만 했을 때 position/z-index가 바뀌지 않도록 원본 순서를 유지한다.
+  }
+  function bringToExtreme(front) {
+    if (!selectedEl) return;
+    if (backgroundMode && isBackgroundElement(selectedEl)) moveBackgroundOrder(selectedEl, front ? 1 : -1, true);
+    else {
+      const targets=selectedZLayers(), others=normalZLayers(), values=others.map(el=>parseInt(iwin.getComputedStyle(el).zIndex)).filter(Number.isFinite);
+      let edge=front ? Math.max(0,...values)+1 : 0;
+      targets.forEach((el,i)=>{ prepareZLayer(el); el.style.zIndex=String(edge+i); });
+    }
+    commitChange();
+  }
+  function zOrder(d) {
+    if (!selectedEl) return;
+    if (backgroundMode && isBackgroundElement(selectedEl)) moveBackgroundOrder(selectedEl,d);
+    else {
+      const targets=selectedZLayers(), targetSet=new Set(targets), z=el=>{const n=parseInt(iwin.getComputedStyle(el).zIndex);return Number.isFinite(n)?n:0;};
+      const current=d>0?Math.max(...targets.map(z)):Math.min(...targets.map(z)), others=normalZLayers().filter(el=>!targetSet.has(el)).map(z);
+      const candidates=others.filter(v=>d>0?v>current:v<current), edge=d>0?(candidates.length?Math.min(...candidates)+1:current+1):Math.max(0,candidates.length?Math.max(...candidates)-targets.length:current-targets.length);
+      targets.forEach((el,i)=>{prepareZLayer(el);el.style.zIndex=String(edge+i);});
+    }
+    commitChange();
+  }
+
+  // ── 요소 추가/복제/삭제 ───────────────────────
+  function addBox(kind) {
+    if (!idoc) return;
+    if (backgroundMode && kind !== 'rect') { alert('배경 편집 중에는 도형을 배경 레이어에 추가할 수 있습니다.'); return; }
+    const el = idoc.createElement('div'); el.className = 'slide-el';
+    if (kind === 'text') { el.textContent = '텍스트를 입력하세요'; el.style.cssText = "position:absolute;left:192px;top:192px;font-size:42px;font-family:Pretendard,'Noto Sans KR','Malgun Gothic',Arial,sans-serif;color:#333;padding:6px;"; }
+    else { el.style.cssText = 'position:absolute;left:224px;top:224px;width:352px;height:208px;background:#4a9eff;border-radius:16px;'; }
+    const asBackground = backgroundMode && kind === 'rect';
+    if (asBackground) {
+      prepareBackgroundStacking(el);
+      slideRoot().insertBefore(el, slideRoot().firstChild);
+      select(el, false, true);
+    } else {
+      slideRoot().appendChild(el); select(el);
+    }
+    commitChange();
+    if (kind === 'text') beginTextEdit(el);
+  }
+  // ── 우클릭 컨텍스트 메뉴 ──────────────────────
+  function showCtx(x, y) {
+    if (!selectedEl) return;
+    const isGroup = selectedEl.classList && selectedEl.classList.contains('slide-group');
+    const multi = selected.length >= 2;
+    $('ci-group').style.display = multi ? 'block' : 'none';
+    $('ci-ungroup').style.display = isGroup ? 'block' : 'none';
+    $('ci-sep').style.display = (multi || isGroup) ? 'block' : 'none';
+    const m = $('ctxmenu');
+    m.style.display = 'block';
+    // 화면 밖으로 넘치지 않게 보정
+    m.style.left = Math.min(x, innerWidth - m.offsetWidth - 4) + 'px';
+    m.style.top = Math.min(y, innerHeight - m.offsetHeight - 4) + 'px';
+  }
+  function hideCtx() { $('ctxmenu').style.display = 'none'; }
+  function ctx(a) {
+    if (a === 'group') groupSel();
+    else if (a === 'ungroup') ungroupSel();
+    else if (a === 'front' && selectedEl) bringToExtreme(true);
+    else if (a === 'back' && selectedEl) bringToExtreme(false);
+    else if (a === 'dup') dupEl();
+    else if (a === 'del') deleteEl();
+    hideCtx();
+  }
+  document.addEventListener('mousedown', e => { if (!$('ctxmenu').contains(e.target)) hideCtx(); if (editingEl && !e.target.closest('#canvas')) finishTextEdit(); });
+  document.addEventListener('contextmenu', e => { if (e.target.closest && !e.target.closest('#canvas-wrap') && !e.target.closest('#ctxmenu')) hideCtx(); });
+
+  // ── 그룹화 / 해제 ─────────────────────────────
+  function groupSel() {
+    if (backgroundMode) return;
+    if (selected.length < 2) return;
+    const sr = slideRoot(), srR = sr.getBoundingClientRect();
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    selected.forEach(el => {
+      const r = el.getBoundingClientRect();
+      minX = Math.min(minX, r.left - srR.left); minY = Math.min(minY, r.top - srR.top);
+      maxX = Math.max(maxX, r.right - srR.left); maxY = Math.max(maxY, r.bottom - srR.top);
+    });
+    const g = idoc.createElement('div');
+    g.className = 'slide-el slide-group';
+    g.style.cssText = `position:absolute;left:${Math.round(minX)}px;top:${Math.round(minY)}px;width:${Math.round(maxX-minX)}px;height:${Math.round(maxY-minY)}px;`;
+    sr.appendChild(g);
+    // 자식을 그룹 안으로, 좌표는 그룹 기준 상대로 변환 (이동 전 측정)
+    selected.forEach(el => {
+      const r = el.getBoundingClientRect();
+      const nl = r.left - srR.left - minX, nt = r.top - srR.top - minY;
+      el.classList.remove('__sel');
+      el.style.position = 'absolute'; el.style.left = Math.round(nl)+'px'; el.style.top = Math.round(nt)+'px';
+      ensureTransformState(el); el.dataset.editorTx = '0'; el.dataset.editorTy = '0'; applyEditorTransform(el);
+      g.appendChild(el);
+    });
+    selected = []; select(g); commitChange();
+  }
+  function ungroupSel() {
+    if (!selectedEl || !selectedEl.classList.contains('slide-group')) return;
+    const g = selectedEl, sr = slideRoot(), srR = sr.getBoundingClientRect();
+    const kids = [...g.children].filter(c => !c.classList.contains('__handle'));
+    // 절대 좌표 복원 (이동 전 측정)
+    const data = kids.map(el => { const r = el.getBoundingClientRect(); return { el, l: r.left - srR.left, t: r.top - srR.top }; });
+    data.forEach(d => { d.el.style.position = 'absolute'; d.el.style.left = Math.round(d.l)+'px'; d.el.style.top = Math.round(d.t)+'px'; ensureTransformState(d.el); d.el.dataset.editorTx='0'; d.el.dataset.editorTy='0'; applyEditorTransform(d.el); sr.appendChild(d.el); });
+    g.remove();
+    deselect();
+    data.forEach(d => { selected.push(d.el); d.el.classList.add('__sel'); });
+    selectedEl = selected[selected.length - 1] || null;
+    refreshSelUI(); commitChange();
+  }
+
+  function dupEl() {
+    if (!selectedEl || selectedEl === slideRoot()) return;
+    const c = selectedEl.cloneNode(true);
+    c.classList.remove('__sel');
+    selectedEl.parentNode.appendChild(c); moveElBy(c, 20, 20); select(c); commitChange();
+  }
+  function deleteEl() {
+    if (!selectedEl || selectedEl === slideRoot()) return;
+    if (isBackgroundElement(selectedEl) && !backgroundMode) return;
+    const deletingBackground = isBackgroundElement(selectedEl);
+    selected.filter(el => el !== slideRoot()).forEach(el => el.remove());
+    deselect(); commitChange();
+    if (deletingBackground) toggleBackgroundMode(false);
+  }
+
+  // ── 이미지 삽입 ───────────────────────────────
+  function insertImage(dataURL, x, y) {
+    const img = idoc.createElement('img'); img.className = 'slide-el'; img.src = dataURL;
+    img.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:384px;height:auto;`;
+    if (backgroundMode) { prepareBackgroundStacking(img); slideRoot().insertBefore(img, slideRoot().firstChild); select(img, false, true); }
+    else { slideRoot().appendChild(img); select(img); }
+    commitChange();
+  }
+  $('imgInput').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader(); r.onload = ev => insertImage(ev.target.result, 240, 160); r.readAsDataURL(f); e.target.value = '';
+  });
+  function onDropImage(e) {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0]; if (!f || !f.type.startsWith('image/')) return;
+    const r = new FileReader(); r.onload = ev => insertImage(ev.target.result, e.clientX - 192, e.clientY - 96); r.readAsDataURL(f);
+  }
+  function onPasteImage(e) {
+    if (!idoc || editingEl || (e.target && ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))) return;
+    const items = [...(e.clipboardData ? e.clipboardData.items : [])].filter(item => item.type && item.type.startsWith('image/'));
+    if (!items.length) return;
+    e.preventDefault();
+    items.forEach((item, index) => {
+      const file = item.getAsFile(); if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => insertImage(ev.target.result, Math.round((SLIDE_W - 384) / 2) + index * 20, Math.round((SLIDE_H - 260) / 2) + index * 20);
+      reader.readAsDataURL(file);
+    });
+  }
+  document.addEventListener('paste', onPasteImage);
+
+  // ── Undo / Redo ───────────────────────────────
+  function commit() { if (idoc) slides[current] = cleanHTML(); }
+  function commitChange() { normalizeLayerBands(); commit(); pushHistory(); renderGrid(); renderThumbs(); }
+  function pushHistory() {
+    history = history.slice(0, hptr + 1);
+    history.push({ slides: [...slides], current });
+    hptr = history.length - 1;
+  }
+  function undo() { if (hptr <= 0) return; hptr--; applyHistory(); }
+  function redo() { if (hptr >= history.length - 1) return; hptr++; applyHistory(); }
+  function applyHistory() { const s = history[hptr]; slides = [...s.slides]; current = s.current; renderThumbs(); loadSlide(current); }
+  function keyHandler(e) {
+    if(previewMode){if(e.key==='Escape'){e.preventDefault();togglePreviewMode(false);}return;}
+    // 텍스트 편집 중에는 대부분의 단축키를 입력으로 처리하고, Esc만 편집 종료로 쓴다.
+    if (editingEl && e.key === 'Escape') { e.preventDefault(); finishTextEdit(); return; }
+    if (idoc && idoc.activeElement && idoc.activeElement.contentEditable === 'true') return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
+      e.preventDefault();
+      deleteEl(); return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); if (backgroundMode) toggleBackgroundMode(false); else deselect(); return; }
+    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key) && selected.length) {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+      const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      selected.filter(el => el !== slideRoot() && el.dataset.editorLocked !== 'true').forEach(el => moveElBy(el, dx, dy));
+      updateHandles(); syncPanel(); commitChange(); return;
+    }
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'a') {
+      e.preventDefault(); deselect();
+      if (backgroundMode) select(backgroundTarget(), false, true);
+      else editableLayers().filter(el => el.dataset.editorHidden !== 'true' && !isBackgroundElement(el)).forEach((el,i) => select(el, i>0));
+    }
+    else if (k === 'c') { e.preventDefault(); clipboard = selected.filter(el => el !== slideRoot()).map(el => el.cloneNode(true)); }
+    else if (k === 'x') { e.preventDefault(); clipboard = selected.filter(el => el !== slideRoot()).map(el => el.cloneNode(true)); deleteEl(); }
+    else if (k === 'v' && clipboard.length) { e.preventDefault(); deselect(); clipboard.forEach((src,i) => { const c=src.cloneNode(true); c.classList.remove('__sel'); slideRoot().appendChild(c); moveElBy(c,20,20); select(c,i>0); }); clipboard=clipboard.map(el=>el.cloneNode(true)); commitChange(); }
+    else if (k === 'g' && !e.shiftKey) { e.preventDefault(); groupSel(); }
+    else if (k === 'g' && e.shiftKey) { e.preventDefault(); ungroupSel(); }
+    else if (k === 'd') { e.preventDefault(); dupEl(); }
+    else if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+  }
+  document.addEventListener('keydown', keyHandler);
+
+  // ── 슬라이드 추가/삭제/썸네일 ─────────────────
+  function makeBlankSlide(w = SLIDE_W, h = SLIDE_H) {
+    w=Math.max(240,Math.round(w||1280));h=Math.max(180,Math.round(h||720));
+    return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><style>html,body{margin:0;width:${w}px;height:${h}px;overflow:hidden}#slide{width:${w}px;height:${h}px;position:relative;background:#fff;font-family:Pretendard,'Noto Sans KR','Malgun Gothic',Arial,sans-serif}</style></head><body><div id="slide"></div></body></html>`;
+  }
+  function isBlankSlide(html) {
+    try {
+      const d=new DOMParser().parseFromString(html,'text/html'),root=d.getElementById('slide')||d.body;
+      if(!root)return true;
+      const meaningful=[...root.children].filter(el=>!['STYLE','SCRIPT','LINK','META'].includes(el.tagName)&&!el.classList.contains('__handle')&&!el.classList.contains('__rubber'));
+      return meaningful.length===0&&!(root.textContent||'').trim();
+    } catch(_){return false;}
+  }
+  function addSlide() {
+    if(!slides.length){
+      const w=projectMode==='presentation'?1280:SLIDE_W,h=projectMode==='presentation'?1440:SLIDE_H;
+      slides=[makeBlankSlide(w,h)];current=0;hideWelcome();pushHistory();loadSlide(0);renderThumbs();return;
+    }
+    commit();slides.splice(current+1,0,makeBlankSlide(projectMode==='presentation'?1280:SLIDE_W,projectMode==='presentation'?1440:SLIDE_H));current++;pushHistory();loadSlide(current);renderThumbs();
+  }
+  function delSlide(i, ev) {
+    ev.stopPropagation();
+    commit();
+    if (slides.length === 1) {
+      if (isBlankSlide(slides[0])) return;
+      slides[0]=makeBlankSlide(1280,1440);current=0;
+      pushHistory();loadSlide(0);renderThumbs();return;
+    }
+    slides.splice(i, 1);
+    if (i < current) current--;
+    if (current >= slides.length) current = slides.length - 1;
+    pushHistory(); loadSlide(current); renderThumbs();
+  }
+  function renderThumbs() {
+    const c = $('thumbs'); c.innerHTML = '';
+    if(viewStates.length){
+      viewStates.forEach((view,i)=>{
+        const live=virtualViewHTML(view),wrap=document.createElement('div');
+        wrap.className='thumb-wrap'+(i===activeViewIndex?' active':'');wrap.dataset.index=i;wrap.title=view.label;
+        wrap.onclick=()=>activateView(i);
+        wrap.innerHTML=`<div class="thumb"></div><div class="thumb-view-name">${i+1}. ${view.label}</div>`;
+        const preview=document.createElement('iframe'),size=detectCanvasSize(live),scale=size.longMode?158/size.w:Math.min(158/size.w,89/size.h);
+        preview.style.width=size.w+'px';preview.style.height=size.h+'px';preview.style.transform=`scale(${scale})`;preview.srcdoc=previewHTML(live);
+        wrap.querySelector('.thumb').appendChild(preview);c.appendChild(wrap);
+      });
+      return;
+    }
+    slides.forEach((doc, i) => {
+      const wrap = document.createElement('div'); wrap.className = 'thumb-wrap' + (i === current ? ' active' : '');
+      wrap.draggable = true; wrap.dataset.index = i;
+      wrap.onclick = () => gotoSlide(i);
+      if (i !== current) slides[i] = normalizeSlideHtml(doc);
+      const live = (i === current && idoc && loadedSlideIndex === current) ? snapshotHTML() : slides[i];
+      wrap.innerHTML = `<div class="thumb"></div><div class="thumb-num">${i+1}</div><div class="thumb-del" draggable="false" onclick="delSlide(${i},event)">✕</div>`;
+      const preview = document.createElement('iframe'), size = detectCanvasSize(live), scale = size.longMode ? 158/size.w : Math.min(158/size.w,89/size.h);
+      preview.style.width=size.w+'px'; preview.style.height=size.h+'px'; preview.style.transform=`scale(${scale})`; preview.srcdoc = previewHTML(live); wrap.querySelector('.thumb').appendChild(preview);
+      wrap.addEventListener('dragstart', e => { commit(); draggedSlideIndex = i; wrap.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); });
+      wrap.addEventListener('dragover', e => { e.preventDefault(); clearThumbDropMarks(); const after = e.clientY > wrap.getBoundingClientRect().top + wrap.offsetHeight / 2; wrap.classList.add(after ? 'drop-after' : 'drop-before'); e.dataTransfer.dropEffect = 'move'; });
+      wrap.addEventListener('drop', e => { e.preventDefault(); const from = draggedSlideIndex ?? parseInt(e.dataTransfer.getData('text/plain')); const after = e.clientY > wrap.getBoundingClientRect().top + wrap.offsetHeight / 2; reorderSlides(from, i + (after ? 1 : 0)); });
+      wrap.addEventListener('dragend', () => { draggedSlideIndex = null; wrap.classList.remove('dragging'); clearThumbDropMarks(); });
+      c.appendChild(wrap);
+    });
+  }
+  function previewHTML(html) {
+    try {
+      const d=new DOMParser().parseFromString(html,'text/html');
+      d.querySelectorAll('script').forEach(s=>{s.type='application/x-editor-preview-disabled';s.removeAttribute('src');});
+      return '<!DOCTYPE html>\n'+d.documentElement.outerHTML;
+    } catch (_) { return html; }
+  }
+  function clearThumbDropMarks() { document.querySelectorAll('.thumb-wrap').forEach(w => w.classList.remove('drop-before','drop-after')); }
+  function reorderSlides(from, insertion) {
+    if (!Number.isInteger(from) || from < 0 || from >= slides.length) return;
+    let to = Math.max(0, Math.min(slides.length, insertion));
+    const oldCurrent = current, moved = slides.splice(from, 1)[0];
+    if (from < to) to--;
+    slides.splice(to, 0, moved);
+    if (oldCurrent === from) current = to;
+    else { current = oldCurrent; if (from < oldCurrent) current--; if (to <= current) current++; }
+    draggedSlideIndex = null; document.querySelectorAll('.thumb-wrap').forEach(w => w.classList.remove('dragging')); clearThumbDropMarks(); pushHistory(); loadSlide(current); renderThumbs();
+  }
+  function markActiveThumb() {
+    const active=viewStates.length?activeViewIndex:current;
+    [...document.querySelectorAll('.thumb-wrap')].forEach((w, i) => w.classList.toggle('active', i === active));
+  }
+
+  // ── 정리된 HTML ───────────────────────────────
+  function snapshotHTML(forExport = false) {
+    if (!idoc) return slides[current] || BLANK;
+    const clone = idoc.documentElement.cloneNode(true);
+    clone.querySelectorAll('#__editor,#__editor_scroll,#__editor_zoom,#__editor_grid').forEach(s=>s.remove());
+    clone.querySelectorAll('.__handle, .__rubber').forEach(el => el.remove());
+    clone.querySelectorAll('.__sel').forEach(el => el.classList.remove('__sel'));
+    clone.querySelectorAll('.__editing').forEach(el => el.classList.remove('__editing'));
+    clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+    if(forExport&&viewStates.length)applyViewState(clone,viewStates.find(v=>v.key==='login')||viewStates[0]);
+    if (forExport) clone.querySelectorAll('*').forEach(el => {
+      [...el.attributes].forEach(a => { if (a.name.startsWith('data-editor-') || a.name === 'data-slide-background') el.removeAttribute(a.name); });
+    });
+    return '<!DOCTYPE html>\n' + clone.outerHTML;
+  }
+  function cleanHTML() { return snapshotHTML(); }
+
+  // ── 저장 / 불러오기 ───────────────────────────
+  function exportHTML() { if(!slides.length)return;commit();download('edited_page.html','text/html',snapshotHTML(true)); }
+  function exportJSON() { if(!slides.length)return;commit();download('html_editor_project.json','application/json',JSON.stringify({version:1,mode:projectMode,slides},null,2)); }
+  // ── 기존 버전의 전체 슬라이드 프레젠테이션 HTML / PDF ─────
+  function buildPresentationHTML(autoPrint) {
+    const payload = JSON.stringify(slides).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+    return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>프레젠테이션</title><style>
+      *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#15161b;font-family:Arial,"Malgun Gothic",sans-serif}
+      #stage{position:fixed;inset:0;display:grid;place-items:center;overflow:hidden}.page{display:none;position:relative;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.42);background:#fff}.page.active{display:block}.slide-shell{width:1280px;height:720px;transform-origin:top left}
+      #controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(34,35,43,.90);backdrop-filter:blur(12px);box-shadow:0 8px 28px rgba(0,0,0,.28);color:#fff;z-index:10;opacity:1;transition:opacity .22s ease,transform .22s ease}
+      #controls button{height:36px;padding:0 14px;border:0;border-radius:8px;background:#41434f;color:#fff;font-size:14px;cursor:pointer}#controls button:hover{background:#7655ef}#counter{min-width:72px;text-align:center;color:#d8d9df;font-size:13px}
+      :fullscreen #controls{top:18px;bottom:auto}:fullscreen #print{display:none}:fullscreen .page{box-shadow:none}.ui-hidden{cursor:none}.ui-hidden #controls{opacity:0;pointer-events:none;transform:translate(-50%,-12px)}
+      @page{size:13.333333in 7.5in;margin:0}
+      @media print{html,body{width:auto;height:auto;overflow:visible;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}#stage{position:static;display:block;overflow:visible}#controls{display:none!important}.page,.page.active{display:block!important;width:13.333333in!important;height:7.5in!important;box-shadow:none!important;overflow:hidden;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}.slide-shell{width:1280px!important;height:720px!important;transform:none!important}}
+    </style></head><body><main id="stage"></main><nav id="controls"><button id="prev" aria-label="이전 슬라이드">← 이전</button><span id="counter"></span><button id="next" aria-label="다음 슬라이드">다음 →</button><button id="full" aria-label="전체 화면">전체화면</button><button id="print" aria-label="전체 인쇄">전체 인쇄</button></nav><script>
+      const docs=${payload},W=1280,H=720,stage=document.getElementById('stage');let current=0,pages=[];
+      docs.forEach((doc,i)=>{const parsed=new DOMParser().parseFromString(doc,'text/html'),slide=parsed.getElementById('slide');if(!slide)return;const page=document.createElement('section'),shell=document.createElement('div'),shadow=shell.attachShadow({mode:'open'});page.className='page';shell.className='slide-shell';shadow.innerHTML=[...parsed.querySelectorAll('style')].map(s=>s.outerHTML).join('')+slide.outerHTML;page.appendChild(shell);stage.appendChild(page);pages.push(page)});
+      let hideTimer=null,lastPointerX=null,lastPointerY=null,lastActivity=Date.now();function fit(){const full=!!document.fullscreenElement,pad=full?0:32,s=Math.max(.1,Math.min((innerWidth-pad)/W,(innerHeight-pad)/H));pages.forEach(p=>{p.style.width=Math.round(W*s)+'px';p.style.height=Math.round(H*s)+'px';p.firstElementChild.style.transform='scale('+s+')'})}
+      function go(n){if(!pages.length)return;current=Math.max(0,Math.min(pages.length-1,n));pages.forEach((p,i)=>p.classList.toggle('active',i===current));document.getElementById('counter').textContent=(current+1)+' / '+pages.length;location.hash='slide-'+(current+1);fit()}
+      function hideIfIdle(){clearTimeout(hideTimer);if(!document.fullscreenElement){document.body.classList.remove('ui-hidden');return}const wait=1000-(Date.now()-lastActivity);if(wait<=0)document.body.classList.add('ui-hidden');else hideTimer=setTimeout(hideIfIdle,wait)}function reveal(){lastActivity=Date.now();document.body.classList.remove('ui-hidden');hideIfIdle()}function trackPointer(e){if(lastPointerX===null||Math.abs(e.clientX-lastPointerX)>1||Math.abs(e.clientY-lastPointerY)>1){lastPointerX=e.clientX;lastPointerY=e.clientY;reveal()}}function toggleFull(){if(document.fullscreenElement)document.exitFullscreen();else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen()}
+      document.getElementById('prev').onclick=()=>{go(current-1);reveal()};document.getElementById('next').onclick=()=>{go(current+1);reveal()};document.getElementById('full').onclick=toggleFull;document.getElementById('print').onclick=()=>window.print();
+      function deckKeys(e){const k=e.key||e.code;if(['ArrowRight','PageDown',' ','Space'].includes(k)){e.preventDefault();go(current+1)}else if(['ArrowLeft','PageUp'].includes(k)){e.preventDefault();go(current-1)}else if(k==='Home'){e.preventDefault();go(0)}else if(k==='End'){e.preventDefault();go(pages.length-1)}}document.addEventListener('keydown',deckKeys,true);addEventListener('pointermove',trackPointer,{passive:true});addEventListener('pointerdown',reveal,{passive:true});addEventListener('resize',fit);addEventListener('fullscreenchange',()=>{document.getElementById('full').textContent=document.fullscreenElement?'전체화면 종료':'전체화면';lastPointerX=null;lastPointerY=null;reveal();fit()});go(Math.max(0,(parseInt(location.hash.replace(/\\D/g,''))||1)-1));
+      if(${autoPrint ? 'true' : 'false'})setTimeout(()=>{go(0);window.print()},700);
+    <\/script></body></html>`;
+  }
+  function exportPDF() {
+    if(!slides.length)return;
+    commit();
+    const w = window.open('', '_blank');
+    if (!w) { alert('팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 시도하세요.'); return; }
+    w.document.open(); w.document.write(buildPresentationHTML(true)); w.document.close();
+  }
+
+  $('fileInput').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    readHTMLFile(f,pendingImportMode);e.target.value='';
+  });
+  $('jsonInput').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => { try{const d=JSON.parse(ev.target.result);if(d.slides&&d.slides.length){projectMode=d.mode==='presentation'?'presentation':d.mode==='general'?'general':(isPresentationHTML(d.slides[0])?'presentation':'general');generalZoom=1;slides=d.slides.map(normalizeSlideHtml);current=0;history=[];hptr=-1;hideWelcome();pushHistory();loadSlide(0);renderThumbs();}}catch(err){alert('JSON 프로젝트 파일을 읽지 못했습니다.');} };
+    r.readAsText(f); e.target.value = '';
+  });
+
+  // ── 유틸 ──────────────────────────────────────
+  function download(filename, type, content) {
+    const blob = new Blob([content], { type: type + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function rgbToHex(rgb) {
+    if (!rgb) return '#000000';
+    if (rgb.startsWith('#')) return rgb;
+    if (rgb === 'transparent' || rgb.includes('rgba(0, 0, 0, 0)')) return '#ffffff';
+    const m = rgb.match(/\d+/g); if (!m) return '#000000';
+    return '#' + m.slice(0,3).map(n => (+n).toString(16).padStart(2,'0')).join('');
+  }
+
+  // ── 시작 ──────────────────────────────────────
+  window.addEventListener('resize', fitCanvas);
+  window.addEventListener('resize', renderGrid);
+  $('canvas-wrap').addEventListener('wheel', e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault(); zoomBy(e.deltaY < 0 ? .1 : -.1);
+  }, { passive:false });
+  initWelcomeDrops();
+  showWelcome();
+</script>
+</body>
+</html>
